@@ -68,6 +68,26 @@ function mod.fullAggro()
     return false
 end
 
+function mod.getclassicon()
+    local class = mq.TLO.Me.Class.ShortName()
+    if class == 'BRD' then return 8644 end
+    if class == 'BST' then return 8645 end
+    if class == 'BER' then return 8646 end
+    if class == 'CLR' then return 8647 end
+    if class == 'DRU' then return 8648 end
+    if class == 'ENC' then return 8649 end
+    if class == 'MAG' then return 8650 end
+    if class == 'MNK' then return 8651 end
+    if class == 'NEC' then return 8652 end
+    if class == 'PAL' then return 8653 end
+    if class == 'RNG' then return 8654 end
+    if class == 'ROG' then return 8655 end
+    if class == 'SHD' then return 8656 end
+    if class == 'SHM' then return 8657 end
+    if class == 'WAR' then return 8658 end
+    if class == 'WIZ' then return 8659 end
+end
+
 
 function mod.findIndex(tbl, value)
     for i, v in pairs(tbl) do

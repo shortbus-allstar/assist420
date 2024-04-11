@@ -15,7 +15,8 @@ local med   = require('routines.med')
 local anim = mq.FindTextureAnimation('A_SpellIcons')
 local classanim = mq.FindTextureAnimation('A_DragItem')
 local icons = require('mq.icons')
-
+local frameCounter = 0
+local flashInterval = 250 
 local themes = {}
 local openGUI = true
 local shouldDrawGUI = true
@@ -410,21 +411,241 @@ local function popStyles()
     ImGui.PopStyleVar(1)
 end
 
+local function DrawConsoleTab()
+    if ImGui.BeginTabItem(icons.MD_CODE..'   Console') then
+        local totalWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = totalWidth / 2
+
+        ImGui.Columns(2)
+        ImGui.SetColumnWidth(1,columnWidth)
+        ImGui.SetColumnWidth(2,columnWidth)
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 15) 
+
+        ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(0.8, 0.2, 0.8, 1.0))
+        ImGui.SetWindowFontScale(1.7)
+        ImGui.Text(mq.TLO.Me.Class.ShortName())
+        ImGui.PopStyleColor()
+        ImGui.SameLine()
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 8)
+        ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(0, 1, 0, 1.0)) 
+        ImGui.Text('420')
+        ImGui.PopStyleColor()
+        ImGui.SameLine()
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 15)
+        ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(1.0, 0.5, 0.0, 1.0)) 
+        ImGui.Text(state.version)
+        ImGui.SetWindowFontScale(1)
+        ImGui.PopStyleColor()
+
+
+        ImGui.NewLine()
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 90) 
+
+        if ImGui.Button('Patch Notes',85,25) then
+            os.execute('start https://github.com/shortbus-allstar/assist420/blob/main/README.md')
+        end
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 30) 
+
+        classanim:SetTextureCell(702)
+        ImGui.DrawTextureAnimation(classanim,200,200)
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 105) 
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 80)
+        classanim:SetTextureCell(lib.getclassicon())
+        ImGui.DrawTextureAnimation(classanim,115,115)
+
+        ImGui.NewLine()
+        local windowHeight = ImGui.GetWindowHeight()
+        local buttonPosY = windowHeight - 125  -- Adjust the spacing as needed
+    
+        ImGui.SetCursorPosY(buttonPosY)
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 12) 
+
+        if state.paused then
+            ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(0, 1, 0, 1))
+            if ImGui.Button(string.format('Resume\n     ' .. icons.FA_PLAY), 55, 55) then
+                state.paused = false
+            end
+            ImGui.PopStyleColor()
+        else
+            ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(1, 0, 0, 1))
+            if ImGui.Button(string.format('Pause\n    ' .. icons.FA_PAUSE), 55, 55) then
+                state.paused = true
+                mq.cmd('/stopcast')
+            end
+            ImGui.PopStyleColor()
+        end
+        ImGui.SameLine()
+
+        ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(0, 1, 1, 1))
+
+        if ImGui.Button(string.format('Update\n     ' .. icons.FA_DOWNLOAD), 55 * 2, 55) then
+
+            local githubver = string.sub(state.githubver, 2)              local mqNextDir = mq.luaDir
+            local zipFilePath = mqNextDir .. "\\assist420.zip"
+            
+            -- Download the zip file
+            local downloadCommand = 'powershell.exe -ExecutionPolicy Bypass -Command "& {Invoke-WebRequest -Uri \'https://github.com/shortbus-allstar/assist420/archive/' .. state.githubver .. '.zip\' -OutFile \'' .. zipFilePath .. '\'}"'
+            local downloadSuccess = os.execute(downloadCommand)
+            
+            -- Check if download was successful
+            if downloadSuccess then
+                print("Download successful.")
+            else
+                print("Download failed.")
+                return  -- Exit script if download failed
+            end
+            
+            -- Extract contents of the zip file
+            local extractCommand = 'powershell.exe -Command "Expand-Archive -Path \'' .. zipFilePath .. '\' -DestinationPath \'' .. mqNextDir .. '\' -Force"'
+            local extractSuccess = os.execute(extractCommand)
+            
+            
+            -- Define the path to the extracted directory
+            local extractedDir = mqNextDir .. "\\assist420-" .. githubver
+            print(extractedDir)
+            local targetDir = mq.luaDir .. "\\assist420test"
+            
+            -- Print the contents of the extracted directory before copying
+            print("Contents of extracted directory before copying:")
+            os.execute('dir "' .. extractedDir .. '"')
+            
+            -- Copy contents of the extracted directory to the target directory
+            local copyCommand = 'xcopy /s /e /q /y "' .. extractedDir .. '" "' .. targetDir .. '"'
+            local copySuccess = os.execute(copyCommand)
+            
+            -- Print the contents of the target directory after copying
+            os.execute('dir "' .. targetDir .. '"')
+            
+            -- Clean up: Delete the extracted directory and zip file
+            local cleanupCommand1 = 'rmdir /s /q "' .. extractedDir .. '"'
+            local cleanupCommand2 = 'del /q "' .. zipFilePath .. '"'
+            os.execute(cleanupCommand1)
+            os.execute(cleanupCommand2)
+            
+        end
+            
+        ImGui.PopStyleColor()
+
+        if ImGui.IsItemHovered() and state.version ~= state.githubver and ImGui.IsItemHovered() then
+            ImGui.SetTooltip("This update includes a config change. Saving a preset as a backup is recommended")
+        end
+
+        
+
+        ImGui.SameLine()
+
+
+        if ImGui.Button(string.format('Reload\n     ' .. icons.FA_REFRESH), 55, 55) then
+            mq.cmd('/multiline ; /lua stop assist420 ; /timed 5 /lua run assist420')
+        end
+        if state.version ~= tostring(state.githubver) then
+            local alpha = 0.5 * (1 + math.sin((frameCounter % flashInterval) / flashInterval * (2 * math.pi)))  -- Use a sine function for smooth fading
+
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 75) 
+            ImGui.TextColored(ImVec4(1, 0, 0, alpha), "Update Available!")
+        else
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 70)
+            ImGui.TextColored(ImVec4(0, 1, 0, 1), "Using Latest Version")
+        end
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 40) 
+
+        ImGui.Text('GitHub Version:') 
+        ImGui.SameLine()
+        ImGui.PushStyleColor(ImGuiCol.Text, ImVec4(1.0, 0.5, 0.0, 1.0))
+        ImGui.Text(tostring(state.githubver)) 
+        ImGui.PopStyleColor()
+
+        ImGui.NewLine()
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 8) 
+
+        ImGui.NextColumn()
+
+
+        local function hpcolor()
+            if mq.TLO.Me.PctHPs() and tonumber(mq.TLO.Me.PctHPs()) > 75 then return ImVec4(0,1,0,1) end
+            if mq.TLO.Me.PctHPs() and tonumber(mq.TLO.Me.PctHPs()) <= 75 and mq.TLO.Me.PctHPs() > 35 then return ImVec4(1,1,0,1) end
+            if mq.TLO.Me.PctHPs() and tonumber(mq.TLO.Me.PctHPs()) <= 35 then return ImVec4(1,0,0,1) end
+        end
+
+        local function manacolor()
+            if mq.TLO.Me.PctMana() > 75 then return ImVec4(0,1,0,1) end
+            if mq.TLO.Me.PctMana() <= 75 and mq.TLO.Me.PctMana() > 35 then return ImVec4(1,1,0,1) end
+            if mq.TLO.Me.PctMana() <= 35 then return ImVec4(1,0,0,1) end
+        end
+
+        ImGui.Text(mq.TLO.Me.Name())
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Level')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.Me.Level()))
+        ImGui.SameLine()
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),mq.TLO.Me.Class.Name())
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 10) 
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 15) 
+        anim:SetTextureCell(867)
+        ImGui.DrawTextureAnimation(anim,55,55)
+
+        ImGui.NewLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 45) 
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Hitpoints %:')
+        ImGui.SameLine()
+        ImGui.TextColored(hpcolor(),tostring(mq.TLO.Me.PctHPs()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Mana %:')
+        ImGui.SameLine()
+        ImGui.TextColored(manacolor(),tostring(mq.TLO.Me.PctMana()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Current Zone:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.Zone.Name()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Group Main Tank:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.Group.MainTank.Name()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Players in Zone:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.SpawnCount('pc')()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Currently Casting:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.Me.Casting.Name()))
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Current Target:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(mq.TLO.Target.CleanName()))
+
+        ImGui.Columns(1)
+        ImGui.EndTabItem()
+    end
+end
+
+local function DrawCondsTab()
+    if ImGui.BeginTabItem("Conditions") then
+        DrawList()
+        DrawEditorWindow()
+        ImGui.EndTabItem()
+    end
+end
+
 function mod.main()
     if not openGUI then return end
     pushStyle(themes[state.class])
     openGUI, shouldDrawGUI = ImGui.Begin(state.class .. '420', openGUI, ImGuiWindowFlags.None)
     if shouldDrawGUI then
+        frameCounter = frameCounter + 1
         ImGui.SetWindowSize(600,800,ImGuiCond.FirstUseEver)
         if ImGui.BeginTabBar("Tabs") then
-            if ImGui.BeginTabItem("List Tab") then
-                DrawList()
-                DrawEditorWindow()
-                ImGui.EndTabItem()
-            end
-    
-            -- Add more tabs as needed
-    
+            DrawConsoleTab()
+            DrawCondsTab()
             ImGui.EndTabBar()
         end
     end
