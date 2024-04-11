@@ -508,7 +508,7 @@ local function DrawConsoleTab()
             -- Define the path to the extracted directory
             local extractedDir = mqNextDir .. "\\assist420-" .. githubver
             print(extractedDir)
-            local targetDir = mq.luaDir .. "\\assist420test"
+            local targetDir = mq.luaDir .. "\\assist420"
             
             -- Print the contents of the extracted directory before copying
             print("Contents of extracted directory before copying:")
