@@ -28,6 +28,7 @@ function mod.doMed()
     write.Trace('doMed function')
     state.updateLoopState()
     if state.paused then return end
+    if state.config.movement ~= 'auto' then return end
     local shouldIMed = mod.checkMed()
     if not shouldIMed then return
     elseif state.medding == true and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Cast.Timing() == 0 then 

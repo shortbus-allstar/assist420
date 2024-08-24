@@ -7,8 +7,8 @@ local mod = {}
 
 function mod.handleTarget()
     write.Trace('handleTarget function')
-    if (mq.TLO.Target.ID() or 0) ~= (mq.TLO.Me.GroupAssistTarget.ID() or 0) and lib.combatStatus() ~= 'out' then
-        mq.cmdf('/squelch /mqt id %s',mq.TLO.Me.GroupAssistTarget.ID())
+    if (mq.TLO.Target.ID() or 0) ~= (state.assistSpawn.ID() or 0) and lib.combatStatus() ~= 'out' then
+        mq.cmdf('/squelch /mqt id %s',state.assistSpawn.ID())
         mq.delay(150)
     end
 end
@@ -27,8 +27,8 @@ end
 
 function mod.initialCombatNav()
     write.Trace('initialCombatNav function')
-    if mq.TLO.Me.GroupAssistTarget.MaxRangeTo() and (mq.TLO.Target.ID() or 0) ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= state.config.attackRange and (mq.TLO.Target.Distance3D() or 0) >= (mq.TLO.Me.GroupAssistTarget.MaxRangeTo() - 3) and not mq.TLO.Navigation.Active() then
-        mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on ; /nav target dist=%s',(mq.TLO.Me.GroupAssistTarget.MaxRangeTo() - 3),(mq.TLO.Me.GroupAssistTarget.MaxRangeTo() - 3))
+    if state.assistSpawn.MaxRangeTo() and mq.TLO.Target.ID() ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= state.config.attackRange and (mq.TLO.Target.Distance3D() or 0) >= (state.assistSpawn.MaxRangeTo() - 3) and not mq.TLO.Navigation.Active() then
+        mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on ; /if (${Target.Distance3D}>50) /nav target dist=%s',(state.assistSpawn.MaxRangeTo() - 3),(state.assistSpawn.MaxRangeTo() - 3))
         mq.delay(150)
         return true
     end
@@ -37,17 +37,17 @@ end
 
 function mod.keepAttached()
     write.Trace('keepAttached function')
-    if mq.TLO.Me.GroupAssistTarget.MaxRangeTo() and (mq.TLO.Target.ID() or 0) ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= (mq.TLO.Me.GroupAssistTarget.MaxRangeTo() - 3) and not mq.TLO.Navigation.Active() then
-        mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on',(mq.TLO.Me.GroupAssistTarget.MaxRangeTo() - 3)) 
+    if state.assistSpawn.MaxRangeTo() and mq.TLO.Target.ID() ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= state.config.attackRange and not mq.TLO.Navigation.Active() then
+        mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on',(state.assistSpawn.MaxRangeTo() - 3)) 
         mq.delay(10)
     end
 end
 
 function mod.checkPet()
     write.Trace('checkPet function')
-    if not mq.TLO.Me.GroupAssistTarget.ID() then return end
-    if mq.TLO.Me.Pet() and mq.TLO.Me.GroupAssistTarget.ID ~= 0 and mq.TLO.Me.GroupAssistTarget.Aggressive() and (mq.TLO.Me.GroupAssistTarget.PctHPs() or 100) <= state.config.petAttackAt and (not mq.TLO.Pet.Combat() or mq.TLO.Pet.Target.ID() ~= mq.TLO.Me.GroupAssistTarget.ID()) and (mq.TLO.Me.GroupAssistTarget.Distance3D() or 500) <= state.config.petRange then
-        mq.cmdf('/squelch /pet attack %s', mq.TLO.Me.GroupAssistTarget.ID())
+    if not state.assistSpawn.ID() then return end
+    if mq.TLO.Me.Pet() and state.assistSpawn.ID ~= 0 and state.assistSpawn.Aggressive() and (state.assistSpawn.PctHPs() or 100) <= state.config.petAttackAt and (not mq.TLO.Pet.Combat() or mq.TLO.Pet.Target.ID() ~= state.assistSpawn.ID()) and (state.assistSpawn.Distance3D() or 500) <= state.config.petRange then
+        mq.cmdf('/squelch /pet attack %s', state.assistSpawn.ID())
     end
 
 end
