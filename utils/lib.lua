@@ -26,24 +26,18 @@ function mod.incombat()
     return mq.TLO.Me.Combat() and (mq.TLO.Target.Distance3D() or math.huge) < state.config.attackRange and mq.TLO.Target.Aggressive() and mod.meleeready()
 end
 
-function mod.debugxtars()
-    local xtarheals = tonumber(state.config.General.XTarHealList)
-    write.Info('Debugging XTarget...')
-    mq.cmd('/squelch /assist off')
-    mq.cmd('/squelch /melee plugin=0')
-    for i = 1,20 - xtarheals do
-        mq.cmdf('/xtar set %s ah',i)
-        mq.delay(20)
-    end
-end
-
 function mod.combatStatus()
     write.Trace('combatStatus function')
-    if mq.TLO.Me.Combat() then return 'combat' end
-    if mq.TLO.Me.CombatState() == 'COMBAT' then return 'combat' end
-    if mq.TLO.Me.GroupAssistTarget() and mq.TLO.Me.GroupAssistTarget.PctHPs() <= state.config.attackAt then return 'combat' end
+    if mq.TLO.Me.Combat() then write.Trace('In Combat') return 'combat' end
+    if mq.TLO.Me.CombatState() == 'COMBAT' then write.Trace('Combat State') return 'combat' end
+    if state.assistSpawn then
+        if (state.assistSpawn.PctHPs() or math.huge) <= state.config.attackAt then 
+            write.Trace('Group Engaged') return 'combat' 
+        end
+    end
     local table = mq.getFilteredSpawns(function(s) return s.Aggressive() and s.Distance3D() <= state.config.attackRange and s.Type() == 'NPC' end)
-    if #table > 0 then return 'engaged' end
+    if #table > 0 then write.Trace('Engaged') return 'engaged' end
+    write.Trace('Out')
     return 'out' 
 end
 
@@ -59,13 +53,14 @@ function mod.XTAggroCount()
 end
 
 function mod.fullAggro()
+    local aggro = false
     for i = 1,20 do
         if mq.TLO.Me.XTarget(i).ID() ~= 0 and mq.TLO.Me.XTarget(i).PctAggro() == 100 then
-            return true
+            aggro = true
+            break
         end
-        mq.delay(10)
     end
-    return false
+    return aggro
 end
 
 function mod.getclassicon()
@@ -107,8 +102,124 @@ function mod.passiveZone(id)
     return false
 end
 
+function mod.unZipIgnores()
+    local idtable = {}
+    for _, v in pairs(state.config.ignores) do
+        if v[1] == mq.TLO.Zone.ShortName() then
+            for _, v2 in ipairs(state.config.ignores[mq.TLO.Zone.ShortName()]) do
+                if v2 ~= mq.TLO.Zone.ShortName() then table.insert(idtable,mq.TLO.Spawn(v2).ID()) end
+            end
+            return idtable
+        end
+    end
+    if not state.config.ignores[mq.TLO.Zone.ShortName()] then 
+        state.config.ignores[mq.TLO.Zone.ShortName()] = {} 
+        return idtable
+    end
+    return idtable
+end
+
+function mod.zipIgnores()
+    local nametable = {}
+    for _, v in ipairs(state.pullIgnores) do
+        table.insert(nametable,mq.TLO.Spawn(v).Name())
+    end
+    table.insert(nametable,1,mq.TLO.Zone.ShortName())
+    return nametable
+end
+
+function mod.getAssistTarget()
+    local spawntbl = {}
+    if state.config.assistType == 'Group MA' then
+        state.maname = mq.TLO.Group.MainAssist.Name()
+        return mq.TLO.Me.GroupAssistTarget
+    elseif state.config.assistType == 'Raid MA' then
+        state.maname = mq.TLO.Raid.MainAssist.Name()
+        return mq.TLO.Me.RaidAssistTarget
+    elseif state.config.assistType == 'Custom Name' then
+        spawntbl = mod.initAssistObserver(state.config.assistTypeCustName)
+        return spawntbl
+    elseif state.config.assistType == 'Custom ID' then
+        spawntbl = mod.initAssistObserver(mq.TLO.Spawn(state.config.assistTypeCustID).Name())
+        return spawntbl
+    end
+end
+
+function mod.getChaseTarget()
+    if state.config.chaseType == 'Group MA' then
+        return mq.TLO.Spawn(mq.TLO.Group.MainAssist.ID())
+    elseif state.config.chaseType == 'Group Tank' then
+        return mq.TLO.Spawn(mq.TLO.Group.MainTank.ID())
+    elseif state.config.chaseType == 'Custom Name' then
+        return mq.TLO.Spawn(mq.TLO.Spawn(state.config.chaseTypeCustName).ID())
+    elseif state.config.chaseType == 'Custom ID' then
+        return mq.TLO.Spawn(state.config.chaseTypeCustID)
+    end
+end
+
+function mod.initAssistObserver(mainassist)
+    if not mainassist then write.Error('Custom Main Assist not declared correctly. Defaulting to group main assist.') return mq.TLO.Group.MainAssist end
+    if not mq.TLO.DanNet(mainassist)() and (mq.gettime() - state.outAssistTarTimer) > 1000 then
+        if mq.TLO.Spawn(mainassist)() and not state.paused then mq.cmdf('/assist %s',mainassist) end
+        mq.delay(350)
+        if not mq.TLO.Target() then return state.assistSpawn
+        else
+            local tbl = {}
+            local curhp = mq.TLO.Target.PctHPs()
+            local agg = mq.TLO.Target.Aggressive()
+            local maxrngto = mq.TLO.Target.MaxRangeTo()
+            local id = mq.TLO.Target.ID()
+            local dis = mq.TLO.Target.Distance3D()
+            tbl.hpval = curhp
+            state.maname = mainassist
+            print(maxrngto)
+            function tbl.PctHPs() return curhp end
+            function tbl.Aggressive() return agg end
+            function tbl.MaxRangeTo() return maxrngto end
+            function tbl.ID() return id end
+            function tbl.Distance3D() return dis end
+            print(tbl.MaxRangeTo())
+            state.outAssistTarTimer = mq.gettime()
+            return tbl
+        end
+    end
+    if (not mq.TLO.DanNet(mainassist).O('Target.ID')() or mq.TLO.DanNet(mainassist).O('Target.ID')() == 'NULL') and mq.TLO.DanNet(mainassist)() then
+        write.Help('Initializing main assist observer on ' .. mainassist)
+        mq.cmdf('/dobserve %s -q "%s"',mq.TLO.NearestSpawn(string.format('pc %s',mainassist)).Name(),'Target.PctHPs')
+        mq.delay(20)
+        mq.cmdf('/dobserve %s -q "%s"',mq.TLO.NearestSpawn(string.format('pc %s',mainassist)).Name(),'Target.Aggressive')
+        mq.delay(20)
+        mq.cmdf('/dobserve %s -q "%s"',mq.TLO.NearestSpawn(string.format('pc %s',mainassist)).Name(),'Target.MaxRangeTo')
+        mq.delay(20)
+        mq.cmdf('/dobserve %s -q "%s"',mq.TLO.NearestSpawn(string.format('pc %s',mainassist)).Name(),'Target.ID')
+        mq.delay(20)
+        mq.cmdf('/dobserve %s -q "%s"',mq.TLO.NearestSpawn(string.format('pc %s',mainassist)).Name(),'Target.Distance3D')
+    end
+    local tbl = {}
+    tbl.hpval = tonumber(mq.TLO.DanNet(mainassist).O('Target.PctHPs')())
+    state.maname = mainassist
+    function tbl.PctHPs()
+        return tonumber(mq.TLO.DanNet(mainassist).O('Target.PctHPs')())
+    end
+    function tbl.Aggressive()
+        return mq.TLO.DanNet(mainassist).O('Target.Aggressive')()
+    end
+    function tbl.MaxRangeTo()
+        return tonumber(mq.TLO.DanNet(mainassist).O('Target.MaxRangeTo')())
+    end
+    function tbl.ID()
+        return tonumber(mq.TLO.DanNet(mainassist).O('Target.ID')())
+    end
+    function tbl.Distance3D()
+        return tonumber(mq.TLO.DanNet(mainassist).O('Target.Distance3D')())
+    end
+    return tbl
+end
+
+
 function mod.checkFD()
-    if mq.TLO.Me.Feigning() and (not state.feigned) and state.class ~= 'MNK' and state.class ~= 'BST' and state.class ~= 'SHD' and state.class ~= 'NEC' then
+    mq.doevents("failfeign")
+    if mq.TLO.Me.Feigning() and (not state.feigned) and (state.class ~= 'MNK' and state.class ~= 'BST' and state.class ~= 'SHD' and state.class ~= 'NEC') and not state.config.feignOverride then
         mq.cmd('/stand')
     end
     if mq.TLO.Me.Ducking() then 

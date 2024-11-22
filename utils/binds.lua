@@ -6,6 +6,64 @@ local navigation = require('routines.navigation')
 
 local mod = {}
 
+function mod.pullCmd()
+    local abils = require('routines.abils')
+    local combat = require('routines.combat')
+    if mq.TLO.Me.Combat() then mq.cmd('/attack off') end
+        state.pulling = true
+        local tar = navigation.getClosestTarget()
+        if tar then 
+            navigation.navToTarget(tar)
+            write.Info('Pulling target: %s',tar.CleanName())
+            mq.delay(250)
+            local result = nil
+            while result == nil do
+                result = navigation.iAmPulling(tar,'pullcmd')
+                mq.delay(500)
+            end
+            if result == 'interrupted' then return end
+            if result == 'aggro' then
+                mq.cmdf('/squelch /nav locxyz %s %s %s',state.campxloc,state.campyloc,state.campzloc)
+                while not ((state.campxloc - state.config.campRadius < mq.TLO.Me.X() and mq.TLO.Me.X() < state.campxloc + state.config.campRadius) and (state.campyloc - state.config.campRadius < mq.TLO.Me.Y() and mq.TLO.Me.Y() < state.campyloc + state.config.campRadius) and (state.campzloc - 5 < mq.TLO.Me.Z() and mq.TLO.Me.Z() < state.campzloc + 5)) do
+                    state.updateLoopState()
+                    if state.paused then return end
+                    mq.delay(100)
+                end
+                mq.delay(500)
+            end
+            if result == 'finished' then
+                if state.config.pullAbilName ~= 'Melee' and state.config.pullAbilType ~= 'Melee' then
+                    abils.doAbility(state.config.pullAbilName,state.config.pullAbilType,'None')
+                    mq.delay(state.config.postPullAbilPause)
+                else
+                    mq.cmd('/attack on')
+                    mq.delay(state.config.postPullAbilPause)
+                    mq.cmd('/attack off')
+                end
+                if mq.TLO.Me.CombatState() ~= 'COMBAT' then state.pulling = false return end
+                mq.cmdf('/squelch /nav locxyz %s %s %s',state.campxloc,state.campyloc,state.campzloc)
+                while not ((state.campxloc - state.config.campRadius < mq.TLO.Me.X() and mq.TLO.Me.X() < state.campxloc + state.config.campRadius) and (state.campyloc - state.config.campRadius < mq.TLO.Me.Y() and mq.TLO.Me.Y() < state.campyloc + state.config.campRadius) and (state.campzloc - 5 < mq.TLO.Me.Z() and mq.TLO.Me.Z() < state.campzloc + 5)) do
+                    state.updateLoopState()
+                    if state.paused then return end
+                    mq.delay(100)
+                end
+                mq.delay(500)
+                
+                while tar.Distance3D() >= (state.config.attackRange) and not tar.Dead() do
+                    write.Trace('checkCombat pull loop')
+                    state.updateLoopState()
+                    if state.paused then return end
+                    combat.checkPet()
+                    combat.handleTarget()
+                    if not combat.doFacing() then return end
+                    if combat.initialCombatNav() then return end
+                    combat.keepAttached()
+                end
+                state.pulling = false
+            end
+        end
+end
+
 function mod.bindcallback(arg1,arg2)
     if arg1 == 'camp' then 
         if not arg2 then
@@ -115,6 +173,44 @@ function mod.var(key, newValue)
     end
 
     local currentTable = state
+    for i, part in ipairs(parts) do
+        if currentTable[part] == nil then
+            print("\atError: Invalid key or nested structure.")
+            return
+        end
+
+        if i == #parts then
+            -- Print current value
+            print("\atCurrent value: \ar", currentTable[part])
+
+            -- Update the value if a new value is provided
+            if newValue then
+                -- Convert newValue based on the original value's type
+                local originalType = type(currentTable[part])
+
+                if originalType == "boolean" then
+                    currentTable[part] = newValue == "true"
+                elseif originalType == "number" then
+                    currentTable[part] = tonumber(newValue) or currentTable[part]
+                else
+                    currentTable[part] = newValue
+                end
+
+                print("\atValue updated to: \ar", currentTable[part])
+            end
+        else
+            currentTable = currentTable[part]
+        end
+    end
+end
+
+function mod.configcmd(key, newValue)
+    local parts = {}
+    for part in key:gmatch("[^.]+") do
+        table.insert(parts, part)
+    end
+
+    local currentTable = state.config
     for i, part in ipairs(parts) do
         if currentTable[part] == nil then
             print("\atError: Invalid key or nested structure.")

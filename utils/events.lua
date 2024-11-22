@@ -23,8 +23,9 @@ function mod.init()
     mq.event('fizzle', '#*#Your #1#spell fizzles#*#', mod.interruptcallback)
     mq.event('eventDead', 'You died.', mod.eventDead)
     mq.event('eventDeadSlain', 'You have been slain by#*#', mod.eventDead)
-    mq.event('zoned', '#*#Returning to Bind Location#*#', mod.notDead)
-    mq.event('zoned2', 'You have entered#*#.', mod.zoned)
+    mq.event('rezzed2', '#*#Returning to Bind Location#*#', mod.notDead)
+    mq.event('zoned2', 'You have entered #1#.', mod.finishZoning)
+    mq.event('zoned', 'LOADING, PLEASE WAIT...', mod.zoning)
     mq.event('rezzed', 'You regain some experience from resurrection.', mod.notDead)
     for i, _ in ipairs(state.config.events) do
         if state.config.events[i] ~= state.config.events.newevent then
@@ -57,16 +58,25 @@ end
 function mod.eventDead()
     state.dead = true
     write.Info('You greened out dawg. Pausing your shit')
-    state.campxloc, state.campyloc, state.campzloc = navigation.clearCamp()
     mq.flushevents()
 end
 
-function mod.zoned()
+function mod.finishZoning(line, arg1)
+    write.Info('Zoned Event')
+    if arg1 == "the Drunken Monkey stance adequately" then 
+        return 
+    else
+        local lib = require('utils.lib')
+        state.pullIgnores = lib.unZipIgnores()
+    end
+end
+
+function mod.zoning()
     state.campxloc, state.campyloc, state.campzloc = navigation.clearCamp()
 end
 
 mod.interruptcallback = function(line, arg1)
-    write.Debug('Interrup Event')
+    write.Trace('Interrup Event')
     state.interrupted = true
 end
 
