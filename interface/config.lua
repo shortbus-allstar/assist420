@@ -93,6 +93,7 @@ mod.configSettings = {
     attackRange = 75,
     burn = 'auto',
     campRadius = 20,
+    cancelHealsAt = 95,
     chainPullHP = 100,
     chainPullMax = 2,
     chainPullToggle = true,
@@ -103,6 +104,14 @@ mod.configSettings = {
     chaseTypeCustName = '',
     chaseTypeCustID = '',
     combatMed = false,
+    cureAvoids = {
+        'Sunset\'s Shadow',
+        'Discordant Detritus',
+        'Frenzied Venom',
+        'Viscous Venom',
+        'Shadowed Venom',
+        'Curator\'s Revenge'
+    },
     doCuring = true,
     doHealing = true,
     doMedding = true,
@@ -139,9 +148,9 @@ mod.configSettings = {
     hotAt = 95,
     hotRecastTime = 60000,
     hotTargets = {},
-    hotTimers = {},
     ignores = {},
-    interruptToHeal = true,
+    interruptToEmergHeal = true,
+    loglevel = 'info',
     medEndAt = 60,
     medManaAt = 60,
     medStop = 90,
@@ -166,6 +175,9 @@ mod.configSettings = {
     pullRadius = 10000,
     pullZRange = 500,
     returnToCamp = false,
+    rezCheckInterval = 10000,
+    rezFellowship = true,
+    rezGuild = true,
     role = 'assist',
     routines = {
         heals = 1, --Heals, Cures, Rezes
@@ -188,6 +200,7 @@ mod.configSettings = {
     tankPetAttackPct = 99,
     tankTaunting = true,
     tankEngageRadius = 15,
+    useMQ2Melee = false,
     xTarHealList = 4,
 }
 

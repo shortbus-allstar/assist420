@@ -1,6 +1,7 @@
 local mq = require('mq')
 local state = require('utils.state')
 local write = require('utils.Write')
+local lib = require('utils.lib')
 local navigation = require('routines.navigation')
 
 local mod = {}
@@ -21,7 +22,10 @@ end
 function mod.init()
     mq.event('interrupted', '#*#Your #1#spell is interrupted#*#', mod.interruptcallback)
     mq.event('fizzle', '#*#Your #1#spell fizzles#*#', mod.interruptcallback)
+    mq.event('newgroupmem', '#1# has joined the group.', mod.newgroupmem)
     mq.event('eventDead', 'You died.', mod.eventDead)
+    mq.event('eventCannotRez', '#*#This corpse cannot be resurrected#*#', mod.cannotRez)
+    mq.event('eventCannotRez2', '#*#You were unable to restore the corpse to life, but you may have success with a later attempt.#*#', mod.cannotRez)
     mq.event('eventDeadSlain', 'You have been slain by#*#', mod.eventDead)
     mq.event('rezzed2', '#*#Returning to Bind Location#*#', mod.notDead)
     mq.event('zoned2', 'You have entered #1#.', mod.finishZoning)
@@ -66,13 +70,21 @@ function mod.finishZoning(line, arg1)
     if arg1 == "the Drunken Monkey stance adequately" then 
         return 
     else
-        local lib = require('utils.lib')
         state.pullIgnores = lib.unZipIgnores()
     end
 end
 
+function mod.newgroupmem(line, arg1)
+    lib.initToon(arg1)
+end
+
 function mod.zoning()
     state.campxloc, state.campyloc, state.campzloc = navigation.clearCamp()
+end
+
+function mod.cannotRez()
+    write.Info('Cannot rez corpse')
+    state.corpsetimers[mq.TLO.Target.ID()] = mq.gettime() + 50000
 end
 
 mod.interruptcallback = function(line, arg1)

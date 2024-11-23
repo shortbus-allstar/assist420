@@ -1,6 +1,7 @@
 local mq = require('mq')
 local PackageMan = require('mq/PackageMan')
 
+StartTime = mq.gettime()
 
 PackageMan.Require('lua-cjson','cjson')
 PackageMan.Require('luasec','ssl')
@@ -12,9 +13,11 @@ local state = require('utils.state')
 local events = require('utils.events')
 local binds = require('utils.binds')
 local lib = require('utils.lib')
+
 local combat = require('routines.combat')
 local navigation = require('routines.navigation')
 local abils = require('routines.abils')
+local heals = require('routines.heal')
 local med   = require('routines.med')
 local tank = require('routines.tank')
 local ui = require('interface.GUI.gui')
@@ -54,7 +57,12 @@ local function doSetup()
     mq.cmd('/squelch /plugin dannet unload')
     mq.delay(100)
     mq.cmd('/squelch /plugin dannet load')
-    mq.cmd('/squelch /melee plugin=0')
+    if not state.config.useMQ2Melee then 
+        mq.cmd('/squelch /melee plugin=0')
+    else
+        mq.cmd('/squelch /melee plugin=1')
+        mq.cmd('/squelch /melee stickmode=2')
+    end
     mq.cmd('/squelch /assist off')
     
     mq.bind('/state',binds.var)
@@ -69,6 +77,7 @@ local function doSetup()
             mq.cmd('/stand')
         end 
     end)
+    lib.initObservers()
     events.init()
     abils.initQueues(state.config.abilities[state.class])
     state.pullIgnores = lib.unZipIgnores()
@@ -96,6 +105,19 @@ local function doNextAbility(delay)
             end
             
         end
+
+        if routine == 'heals' then
+            for _, v in pairs(state.config.healabils[state.class]) do
+                if v then
+                    local abiltable, _ = heals.processHeal(v,ability.cure,ability.rez,ability.hot)
+                    if abiltable then
+                        write.Warn('%s',abiltable.name)
+                        local prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
+                        if prevabildelay ~= 0 then return end
+                    end
+                end
+            end
+        end
     end
 end
 
@@ -106,10 +128,12 @@ local function getCorrectQueue(role)
                 state.updateLoopState()
                 navigation.checkNav()
                 med.doMed()
-                if lib.combatStatus() ~= 'out' then
-                    combat.checkCombat()
+                if not lib.passiveZone(mq.TLO.Zone.ID()) then
+                    if lib.combatStatus() ~= 'out' then
+                        combat.checkCombat()
+                    end
+                    doNextAbility(delay)
                 end
-                doNextAbility(delay)
             end
         end
     end
@@ -119,10 +143,12 @@ local function getCorrectQueue(role)
                 state.updateLoopState()
                 navigation.checkNav()
                 med.doMed()
-                if lib.combatStatus() ~= 'out' then
-                    tank.doTanking()
+                if not lib.passiveZone(mq.TLO.Zone.ID()) then
+                    if lib.combatStatus() ~= 'out' then
+                        tank.doTanking()
+                    end
+                    doNextAbility(delay)
                 end
-                doNextAbility(delay)
             end
         end
     end
@@ -131,27 +157,29 @@ local function getCorrectQueue(role)
             if lib.meleeready() then
                 state.updateLoopState()
                 navigation.checkNav()
-                navigation.doPulls()
                 med.doMed()
-                if lib.combatStatus() ~= 'out' then
-                    combat.checkCombat()
+                if not lib.passiveZone(mq.TLO.Zone.ID()) then
+                    navigation.doPulls()
+                    if lib.combatStatus() ~= 'out' then
+                        combat.checkCombat()
+                    end
+                    doNextAbility(delay)
                 end
-                doNextAbility(delay)
             end
         end
     end
     if role == 'pullertank' then
         return function(delay) 
             if lib.meleeready() then
-                navigation.doPulls()
                 state.updateLoopState()
                 navigation.checkNav()
                 med.doMed()
-                if lib.combatStatus() ~= 'out' then
-                    combat.checkCombat()
-                    abils.doQueue(state.queueCombat,'Combat')
-                else
-                    abils.doQueue(state.queueOOC,'Out Of Combat')
+                if not lib.passiveZone(mq.TLO.Zone.ID()) then
+                    navigation.doPulls()
+                    if lib.combatStatus() ~= 'out' then
+                        combat.doTanking()
+                    end
+                    doNextAbility(delay)
                 end
             end
         end

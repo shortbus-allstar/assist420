@@ -28,8 +28,10 @@ local openGUI = true
 local shouldDrawGUI = true
 local isEditing = false
 local isEditingAggro = false
+local isEditingHeal = false
 local shouldDrawEditor = true
 local shouldDrawAggroEditor = true
+local shouldDrawHealEditor = true
 local pickerAbilIndex = 0
 local pickerlist = state.config.abilities
 local showCustTar = false
@@ -44,6 +46,10 @@ local pushedStyleVarCount = 0
 local pushedStyleCount = 0
 
 local mod ={}
+
+state.config.cureAvoids = state.config.cureAvoids or {}
+state.config.otherTankList = state.config.otherTankList or {}
+state.config.hotTargets = state.config.hotTargets or {}
 
 local themes = {
     {
@@ -325,6 +331,7 @@ end
 
 local dynamicWindowTitle = ''
 local dynamicAggroWindowTitle = ''
+local dynamicHealWindowTitle = ''
 
 local function deepcopy(orig)
     local orig_type = type(orig)
@@ -344,6 +351,7 @@ end
 local function arrangeAbils()
     table.sort(state.config.abilities[state.class], function(a, b) return a.priority < b.priority end)
     table.sort(state.config.aggroabils[state.class], function(a, b) return a.priority < b.priority end)
+    table.sort(state.config.healabils[state.class], function(a, b) return a.priority < b.priority end)
 end
 
 local isNameInputActive = false
@@ -427,25 +435,28 @@ function DrawTable(name,rows, columns, columnLabels, checkWidth, nameWidth, edit
         -- Fill the table with data
         local alternatingColor = true
         for row = 1, rows do
-            ImGui.TableNextRow(0,27)
-            
 
-            -- Set background color for the row
-            if alternatingColor then
-                ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImVec4(0, 0, 0, 1.0))  -- Darker color
-            else
-                ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImVec4(0.1, 0.1, 0.1, 1.0))  -- Slightly lighter color
-            end
-            alternatingColor = not alternatingColor
+            if name ~= "HealEditWin" or row ~= 4 or state.config.healabils[state.class][editIndex].cure then
+                ImGui.TableNextRow(0,27)
+                
 
-            -- Insert the data for each column in the current row
-            for col = 1, columns do
-                ImGui.TableSetColumnIndex(col - 1)
-                local cellData = columnData[col][row]
-                if type(cellData) == "function" then
-                    cellData()  -- Call the function to render ImGui element
+                -- Set background color for the row
+                if alternatingColor then
+                    ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImVec4(0, 0, 0, 1.0))  -- Darker color
                 else
-                    ImGui.Text(tostring(cellData))
+                    ImGui.TableSetBgColor(ImGuiTableBgTarget.RowBg0, ImVec4(0.1, 0.1, 0.1, 1.0))  -- Slightly lighter color
+                end
+                alternatingColor = not alternatingColor
+
+                -- Insert the data for each column in the current row
+                for col = 1, columns do
+                    ImGui.TableSetColumnIndex(col - 1)
+                    local cellData = columnData[col][row]
+                    if type(cellData) == "function" then
+                        cellData()  -- Call the function to render ImGui element
+                    else
+                        ImGui.Text(tostring(cellData))
+                    end
                 end
             end
         end
@@ -573,6 +584,35 @@ local function DrawEditDeleteAggro(ability,abilList)
         
         for i = 1, #state.config.aggroabils[state.class] do
             state.config.aggroabils[state.class][i].priority = i
+        end
+    end
+
+end
+
+local function DrawEditDeleteHeal(ability,abilList)
+    if ImGui.Button("Edit##Heal" .. ability.priority) then
+        isEditingHeal = true
+        editIndex = ability.priority
+        if ability then
+            if not ability.name then
+                ability.name = 'Blank'
+            end
+            dynamicHealWindowTitle = "Edit Heal Ability - " .. ability.name
+            -- Rest of your code using ability.name
+        else
+           abilList[state.class][editIndex] = {}
+           abilList[state.class][editIndex].name = 'Blank'
+           dynamicHealWindowTitle = "Edit Heal Ability - " .. abilList[state.class][editIndex].name
+        end
+    end
+
+    ImGui.SameLine()
+
+    if ImGui.Button("Delete##" .. ability.priority) then
+        table.remove(abilList[state.class], ability.priority)
+        
+        for i = 1, #state.config.healabils[state.class] do
+            state.config.healabils[state.class][i].priority = i
         end
     end
 
@@ -872,8 +912,126 @@ local function DrawEditorWindow()
     end
 end
 
-local function DrawHealEditWindow()
+local function DrawHealEditorWindow()
+    local flags = bit32.bor(ImGuiWindowFlags.NoSavedSettings)
+    if isEditingHeal then
+        isEditingHeal, shouldDrawHealEditor = ImGui.Begin(dynamicHealWindowTitle, isEditingHeal, flags)
+        if shouldDrawHealEditor then
+            ImGui.SetWindowSize(600, 350, ImGuiCond.FirstUseEver) -- Adjust window size as needed
+
+            local abil = state.config.healabils[state.class][editIndex]
+            local dropdownOptions = {"AA", "Spell", "Item", "Skill", "Disc", "Cmd"} -- Dropdown options
+            local cureOptions = {"Poison", "Disease", "Curse", "Corruption", "Detrimental"} -- Cure type options
+
+            ImGui.Columns(2, "HealColumns", false) -- Split into 2 columns
+
+            -- First table
+            DrawTable("HealEditWin", 10, 2, {"##1", "##2"}, 150, 110, nil,
+                {
+                        function()
+                        ImGui.Text("Name:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup1")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup1", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput1", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.name or ""
+                                abil.name, _ = ImGui.InputTextMultiline("##InputText1", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    "Type:",
+                    function()
+                        ImGui.Text("Cond:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND .. "##1", ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.cond or ""
+                                abil.cond, _ = ImGui.InputTextMultiline("##InputText", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    function()
+                        if abil.cure then 
+                            ImGui.Text("Cure Type:")
+                        else
+                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 25)
+                        end
+                    end,
+                    "Cure:",
+                    "Rez:",
+                    "Active:",
+                    "AE Heal:",
+                    "Emergency Heal:",
+                    "HoT:"
+                },
+                {
+                    function() abil.name = DrawTextInput(abil.name, "##Name", 200) end,
+                    function() abil.type = DrawDropdown(abil.type, "##type", dropdownOptions, 200) end,
+                    function() abil.cond = DrawTextInput(abil.cond, "##Condition", 200) end,
+                    function() if abil.cure then abil.curetype = DrawDropdown(abil.curetype, "##CureType", cureOptions, 110) end end,
+                    function() abil.cure = ImGui.Checkbox("##Cure", abil.cure) end,
+                    function() abil.rez = ImGui.Checkbox("##Rez", abil.rez) end,
+                    function() abil.active = ImGui.Checkbox("##Active", abil.active) end,
+                    function() abil.aeheal = ImGui.Checkbox("##aeheal", abil.aeheal) end,
+                    function() abil.emergheal = ImGui.Checkbox("##emergheal", abil.emergheal) end,
+                    function() abil.hot = ImGui.Checkbox("##hot", abil.hot) end
+                })
+
+            ImGui.NextColumn() -- Move to the next column
+
+            -- Second table
+            DrawTable("HealEditWin2", 9, 2, {"##3", "##4"}, 150, 120, nil,
+                {
+                    "Retry CD:",
+                    "Loop Delay:",
+                    "Priority:",
+                    "Use XTar:",
+                    "Use Group Tank:",
+                    "Use Group Members:",
+                    "Use Other Tanks:",
+                    "Use Self:",
+                    "Use Pets:",
+                },
+                {
+                    function() abil.abilcd = DrawNumberInput(abil.abilcd, "##abilcd") end,
+                    function() abil.loopdel = DrawNumberInput(abil.loopdel, "##loopdel") end,
+                    function() abil.priority = DrawNumberInput(abil.priority, "##priority") end,
+                    function() abil.usextar = ImGui.Checkbox("##UseXtar", abil.usextar) end,
+                    function() abil.usegrouptank = ImGui.Checkbox("##UseGroupTank", abil.usegrouptank) end,
+                    function() abil.usegroupmember = ImGui.Checkbox("##UseGroupMember", abil.usegroupmember) end,
+                    function() abil.useothertank = ImGui.Checkbox("##UseOtherTank", abil.useothertank) end,
+                    function() abil.useself = ImGui.Checkbox("##UseSelf", abil.useself) end,
+                    function() abil.usepets = ImGui.Checkbox("##UsePets", abil.usepets) end,
+                    
+                })
+
+            ImGui.Columns(1) -- Reset columns to single column layout
+
+            ImGui.End()
+        end
+    end
 end
+
+
 
 local function DrawAggroList()
     local function calculateTableHeight()
@@ -917,6 +1075,57 @@ local function DrawAggroList()
     
 
 end
+
+local function DrawHealList()
+    local function calculateTableHeight()
+        local totalHeight = (#state.config.healabils[state.class] * 27) + 20
+        if totalHeight < 317 then
+            return totalHeight
+        else
+            return 317
+        end
+    end
+
+    local tableHeight = calculateTableHeight()
+    ImGui.BeginChild("HealListBorder", ImVec2(0, tableHeight))
+
+    local totalWidth = ImGui.GetWindowWidth()
+    local checkboxWidth = totalWidth * 0.15
+    local nameWidth = totalWidth * 0.65
+    local editButtonWidth = totalWidth * 0.20
+
+    local activedata = {}
+    local buttondata = {}
+    local editdata = {}
+
+    for i = #state.config.healabils[state.class], 1, -1 do
+        local v = state.config.healabils[state.class][i]
+        if v.priority ~= i then v.priority = i end
+        if not v then
+            write.Error('Healing ability at index', i, 'is nil')
+        else
+            table.insert(activedata, 1, function() v.active = DrawCheckbox(v.active, "##heal" .. i) end)
+            table.insert(buttondata, 1, function() DrawDragDrop(v, state.config.healabils, nameWidth, i) end)
+            table.insert(editdata, 1, function() DrawEditDeleteHeal(v, state.config.healabils) end)
+        end
+    end
+
+    DrawTable(
+        "HealListTable",
+        #state.config.healabils[state.class],
+        3,
+        {"Active", "Heal Ability", "Edit / Delete"},
+        checkboxWidth,
+        nameWidth,
+        editButtonWidth,
+        activedata,
+        buttondata,
+        editdata
+    )
+
+    ImGui.EndChild()
+end
+
 
 local function DrawList()
 
@@ -1488,7 +1697,7 @@ local function DrawConsoleTab()
                 ImGui.PushStyleColor(ImGuiCol.Text, isSelected and ImVec4(0, 1, 1, 1) or ImGui.GetStyleColorVec4(ImGuiCol.Text))
                 if ImGui.Selectable(option, isSelected) then
                     selectedOptionIndex = i
-                    state.config.role = option -- Update state.loglevel based on the selected option
+                    state.config.role = option -- Update state.config.loglevel based on the selected option
                 end
             
                 ImGui.PopStyleColor()
@@ -1508,13 +1717,13 @@ local function DrawConsoleTab()
 
         local options = { "trace", "debug", "info", "warn", "error", "fatal", "help" }
 
-        if ImGui.BeginCombo("##loglevel:", state.loglevel, ImGuiComboFlags.None) then
+        if ImGui.BeginCombo("##loglevel:", state.config.loglevel, ImGuiComboFlags.None) then
             for i, option in ipairs(options) do
                 local isSelected = (i == selectedOptionIndex2)
                 ImGui.PushStyleColor(ImGuiCol.Text, isSelected and ImVec4(0, 1, 1, 1) or ImGui.GetStyleColorVec4(ImGuiCol.Text))
                 if ImGui.Selectable(option, isSelected) then
                     selectedOptionIndex2 = i
-                    state.loglevel = option -- Update state.loglevel based on the selected option
+                    state.config.loglevel = option -- Update state.config.loglevel based on the selected option
                 end
             
                 ImGui.PopStyleColor()
@@ -1540,7 +1749,7 @@ local function DrawConsoleTab()
             
                 if ImGui.Selectable(theme.name, isSelected) then
                     selectedOptionIndextheme = i
-                    state.activeTheme = theme -- Update state.loglevel based on the selected option
+                    state.activeTheme = theme -- Update state.config.loglevel based on the selected option
                 end
             
                 ImGui.PopStyleColor()
@@ -1603,28 +1812,27 @@ local function DrawRoutineTable()
             if ImGui.Button(routineName, ImVec2(ImGui.GetContentRegionAvail(), 0)) then
             end
 
-            -- Only allow drag and drop if it's not the "heals" routine
-            if routineName ~= "heals" then
-                -- Drag and drop source
-                if ImGui.BeginDragDropSource() then
-                    ImGui.SetDragDropPayload("ROUTINE_INDEX", index)
-                    ImGui.Text("Routine: %s", routineName)
-                    ImGui.EndDragDropSource()
-                end
 
-                -- Drag and drop target
-                if ImGui.BeginDragDropTarget() then
-                    local payload = ImGui.AcceptDragDropPayload("ROUTINE_INDEX")
-                    if payload then
-                        local targetIndex = payload.Data
-                        if targetIndex ~= index then
-                            -- Swap the routines
-                            state.config.routines[routineName], state.config.routines[sortedRoutines[targetIndex].name] = state.config.routines[sortedRoutines[targetIndex].name], state.config.routines[routineName]
-                        end
-                    end
-                    ImGui.EndDragDropTarget()
-                end
+            -- Drag and drop source
+            if ImGui.BeginDragDropSource() then
+                ImGui.SetDragDropPayload("ROUTINE_INDEX", index)
+                ImGui.Text("Routine: %s", routineName)
+                ImGui.EndDragDropSource()
             end
+
+            -- Drag and drop target
+            if ImGui.BeginDragDropTarget() then
+                local payload = ImGui.AcceptDragDropPayload("ROUTINE_INDEX")
+                if payload then
+                    local targetIndex = payload.Data
+                    if targetIndex ~= index then
+                        -- Swap the routines
+                        state.config.routines[routineName], state.config.routines[sortedRoutines[targetIndex].name] = state.config.routines[sortedRoutines[targetIndex].name], state.config.routines[routineName]
+                    end
+                end
+                ImGui.EndDragDropTarget()
+            end
+
 
             index = index + 1
         end
@@ -1651,6 +1859,7 @@ local function DrawGenTab()
 
         state.config.doMedding = DrawCheckbox(state.config.doMedding, "Medding Enabled")
         state.config.combatMed = DrawCheckbox(state.config.combatMed, "Med in Combat")
+        state.config.useMQ2Melee = DrawCheckbox(state.config.useMQ2Melee, "Use MQ2Melee")
         ImGui.NewLine()
         ImGui.Text('Assist Type:')
         local asstypes = { "Group MA", "Raid MA", "Custom Name", "Custom ID"}
@@ -1661,7 +1870,7 @@ local function DrawGenTab()
                 ImGui.PushStyleColor(ImGuiCol.Text, isSelected and ImVec4(0, 1, 1, 1) or ImGui.GetStyleColorVec4(ImGuiCol.Text))
                 if ImGui.Selectable(option, isSelected) then
                     selectedOptionIndex3 = i
-                    state.config.assistType = option -- Update state.loglevel based on the selected option
+                    state.config.assistType = option -- Update state.config.loglevel based on the selected option
                 end
             
                 ImGui.PopStyleColor()
@@ -1750,7 +1959,7 @@ local function DrawGenTab()
                 ImGui.PushStyleColor(ImGuiCol.Text, isSelected and ImVec4(0, 1, 1, 1) or ImGui.GetStyleColorVec4(ImGuiCol.Text))
                 if ImGui.Selectable(option, isSelected) then
                     selectedOptionIndex4 = i
-                    state.config.chaseType = option -- Update state.loglevel based on the selected option
+                    state.config.chaseType = option -- Update state.config.loglevel based on the selected option
                 end
             
                 ImGui.PopStyleColor()
@@ -1884,12 +2093,313 @@ local function DrawGenTab()
     end
 end
 
+local configTabOpen = false
+local abilTabOpen = false
+
+local newCureAvoid = ""  -- Temporary variable for input
+local showAddPopup = false  -- Track whether the popup is active
+
+function DrawCureAvoidsTable()
+    -- Begin table
+    if ImGui.BeginTable("Cure Avoids Table", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        ImGui.TableSetupColumn("Cure Avoids")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, cureAvoid in ipairs(state.config.cureAvoids) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(cureAvoid)  -- Display the Cure Avoid entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##" .. index) then
+                table.remove(state.config.cureAvoids, index)  -- Remove entry on delete button click
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add Cure Avoid") then
+        showAddPopup = true  -- Activate popup
+    end
+
+    -- Draw popup for adding new cure avoids
+    if showAddPopup then
+        ImGui.OpenPopup("Add Cure Avoid")
+        if ImGui.BeginPopupModal("Add Cure Avoid", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new Cure Avoid:")
+            newCureAvoid = ImGui.InputText("##newCureAvoid", newCureAvoid)
+
+            if ImGui.Button("Add") then
+                if newCureAvoid ~= "" then
+                    print(newCureAvoid)
+                    -- Safeguard: Directly insert the string (no processing needed as apostrophes are valid in Lua)
+                    table.insert(state.config.cureAvoids, newCureAvoid)
+                end
+                newCureAvoid = ""  -- Clear the input
+                showAddPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newCureAvoid = ""  -- Clear the input
+                showAddPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
+local newOtherTank = ""  -- Temporary variable for input for otherTankList
+local newHotTarget = ""  -- Temporary variable for input for hotTargets
+local showAddOtherTankPopup = false  -- Track whether the popup for otherTankList is active
+local showAddHotTargetPopup = false  -- Track whether the popup for hotTargets is active
+
+function DrawOtherTankListTable()
+    -- Begin table
+    if ImGui.BeginTable("Other Tank List Table", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        ImGui.TableSetupColumn("Other Tank List")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, otherTank in ipairs(state.config.otherTankList) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(otherTank)  -- Display the entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##OtherTank" .. index) then
+                table.remove(state.config.otherTankList, index)  -- Remove entry
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add Other Tank") then
+        showAddOtherTankPopup = true
+    end
+
+    -- Draw popup for adding new tanks
+    if showAddOtherTankPopup then
+        ImGui.OpenPopup("Add Other Tank")
+        if ImGui.BeginPopupModal("Add Other Tank", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new Other Tank:")
+            newOtherTank = ImGui.InputText("##newOtherTank", newOtherTank)
+
+            if ImGui.Button("Add") then
+                if newOtherTank ~= "" then
+                    table.insert(state.config.otherTankList, newOtherTank)
+                end
+                newOtherTank = ""  -- Clear the input
+                showAddOtherTankPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newOtherTank = ""  -- Clear the input
+                showAddOtherTankPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
+function DrawHotTargetsTable()
+    -- Begin table
+    if ImGui.BeginTable("HoT Targets Table", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        ImGui.TableSetupColumn("HoT Targets")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, hotTarget in ipairs(state.config.hotTargets) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(hotTarget)  -- Display the entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##HotTarget" .. index) then
+                table.remove(state.config.hotTargets, index)  -- Remove entry
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add HoT Target") then
+        showAddHotTargetPopup = true
+    end
+
+    -- Draw popup for adding new HoT targets
+    if showAddHotTargetPopup then
+        ImGui.OpenPopup("Add HoT Target")
+        if ImGui.BeginPopupModal("Add HoT Target", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new HoT Target:")
+            newHotTarget = ImGui.InputText("##newHotTarget", newHotTarget)
+
+            if ImGui.Button("Add") then
+                if newHotTarget ~= "" then
+                    table.insert(state.config.hotTargets, newHotTarget)
+                end
+                newHotTarget = ""  -- Clear the input
+                showAddHotTargetPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newHotTarget = ""  -- Clear the input
+                showAddHotTargetPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
 local function DrawHealTab()
     if ImGui.BeginTabItem(icons.FA_HEART .. "   Heals") then
         local totalWidth, _ = ImGui.GetContentRegionAvail()
         local columnWidth = totalWidth / 2
+
+        
+        if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
+            configTabOpen = true
+        else
+            configTabOpen = false
+        end
+
+        if configTabOpen then
+            ImGui.Columns(2)
+            state.config.doCuring = DrawCheckbox(state.config.doCuring, "Do Curing")
+            state.config.doHealing = DrawCheckbox(state.config.doHealing, "Do Healing")
+            state.config.doRezzing = DrawCheckbox(state.config.doRezzing, "Do Rezzing")
+            state.config.interruptToEmergHeal = DrawCheckbox(state.config.interruptToEmergHeal, "Interrupt to Emergency Heal")
+            state.config.petHeals = DrawCheckbox(state.config.petHeals, "Pet Heals")
+            state.config.rezFellowship = DrawCheckbox(state.config.rezFellowship, "Rez Fellowship")
+            state.config.rezGuild = DrawCheckbox(state.config.rezGuild, "Rez Guild")
+
+            DrawCureAvoidsTable()
+
+            ImGui.NextColumn()
+
+            state.config.cancelHealsAt = DrawNumberInput(state.config.cancelHealsAt, "Cancel Heals At", {0, 100})
+            state.config.groupEmergencyMemberCount = DrawNumberInput(state.config.groupEmergencyMemberCount, "Group Emergency Member Count", {1, 6})
+            state.config.groupHealMemberCount = DrawNumberInput(state.config.groupHealMemberCount, "Group Heal Member Count", {1, 6})
+            state.config.groupHoTMemberCount = DrawNumberInput(state.config.groupHoTMemberCount, "Group HoT Member Count", {1, 6})
+            state.config.groupEmergencyPct = DrawNumberInput(state.config.groupEmergencyPct, "Group Emergency Pct", {0, 100})
+            state.config.groupMemberEmergencyPct = DrawNumberInput(state.config.groupMemberEmergencyPct, "Group Member Emergency Pct", {0, 100})
+            state.config.groupTankEmergencyPct = DrawNumberInput(state.config.groupTankEmergencyPct, "Group Tank Emergency Pct", {0, 100})
+            state.config.otherTankEmergencyPct = DrawNumberInput(state.config.otherTankEmergencyPct, "Other Tank Emergency Pct", {0, 100})
+            state.config.selfEmergencyPct = DrawNumberInput(state.config.selfEmergencyPct, "Self Emergency Pct", {0, 100})
+            state.config.healAt = DrawNumberInput(state.config.healAt, "Heal At", {0, 100})
+            state.config.hotAt = DrawNumberInput(state.config.hotAt, "HoT At", {0, 100})
+            state.config.hotRecastTime = DrawNumberInput(state.config.hotRecastTime, "HoT Recast Time", {0, math.huge}) -- Positive only
+            state.config.rezCheckInterval = DrawNumberInput(state.config.rezCheckInterval, "Rez Check Interval", {0, math.huge}) -- Positive only
+            state.config.xTarHealList = DrawNumberInput(state.config.xTarHealList, "X Target Heal List", {0, 20})
+            ImGui.Columns(1)
+        end
+
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Abilities") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+            DrawHealList()
+            DrawHealEditorWindow()
+
+            ImGui.NewLine()
+
+            if ImGui.Button("Add Heal Abil", 100, 55) then
+                local newTemplate = abils.healAbilTemplate
+                local newAbility = deepcopy(newTemplate)
+                newAbility.priority = #state.config.healabils[state.class] + 1
+                table.insert(state.config.healabils[state.class], newAbility)
+            end
+            ImGui.SameLine()
+        
+            state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+        
+            if state.copyMode then
+                ImGui.SameLine()
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+                ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+                local alpha = 0.5 * (1 + math.sin((frameCounter % flashInterval) / flashInterval * (2 * math.pi)))
+                ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+            end
+        
+            ImGui.SameLine()
+            if state.copyMode then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
+            else
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
+            end
+            ImGui.NewLine()
+        end
+
+        ImGui.NewLine()
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 100)
+        anim:SetTextureCell(99)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,45,45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(118)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,45,45)
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
+
+        ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
+        ImGui.SetWindowFontScale(4)
+        ImGui.Text('Healing')
+        ImGui.PopStyleColor()
+        ImGui.SetWindowFontScale(1)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(101)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,45,45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(156)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,45,45)
+
     
         ImGui.Columns(2)
+
+        DrawOtherTankListTable()
+        ImGui.NextColumn()
+        DrawHotTargetsTable()
+
         ImGui.Columns(1)
         DrawTabEnd()
         ImGui.EndTabItem()

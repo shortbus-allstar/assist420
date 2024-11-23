@@ -157,6 +157,35 @@ function mod.getChaseTarget()
     end
 end
 
+function mod.initToon(toon)
+    write.Help('Initializing DanNet Observers for ' .. toon.Name() .. '...')
+    for _, v in ipairs(state.config.cureAvoids) do
+        mq.cmdf('/dobserve %s -q "%s"',toon.Name(),"Me.Buff['" .. v .. "']")
+        mq.delay(20)
+    end
+
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.CountersDisease')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.CountersPoison')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.CountersCurse')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.CountersCorruption')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Debuff.Detrimentals')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.Buff[Resurrection Sickness]')
+    mq.delay(20)
+    mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.Buff[Revival Sickness]')
+    mq.delay(20)
+end
+
+function mod.initObservers()
+    for i = 1, mq.TLO.Me.GroupSize() - 1 do
+        mod.initToon(mq.TLO.Group.Member(i))
+    end
+end
+
 function mod.initAssistObserver(mainassist)
     if not mainassist then write.Error('Custom Main Assist not declared correctly. Defaulting to group main assist.') return mq.TLO.Group.MainAssist end
     if not mq.TLO.DanNet(mainassist)() and (mq.gettime() - state.outAssistTarTimer) > 1000 then

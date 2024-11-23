@@ -34,6 +34,28 @@ mod.aggroAbilTemplate = {
     mobcount = 2
 }
 
+mod.healAbilTemplate = {
+    name = 'Enter Name Here',
+    type = 'Spell',
+    cond = 'true',
+    priority = 1,
+    loopdel = 0,
+    abilcd = 10,
+    active = true,
+    cure = false,
+    curetype = "Poison",
+    rez = false,
+    usextar = true,
+    usegrouptank = true,
+    usegroupmember = true,
+    useothertank = true,
+    useself = true,
+    usepets = true,
+    aeheal = false,
+    emergheal = false,
+    hot = false,
+}
+
 function mod.loadAbilCond(cond)
     local result, err = load('return ' .. cond, nil, 't', { mq = mq })
     if result then
@@ -55,8 +77,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
         if (mq.gettime() - state.cooldowns[name]) < abilcd then return false end
     end
     if not lib.inControl() then return false end
-    if mq.TLO.Me.Feigning() and feign then return false end
-    if mq.TLO.Me.Feigning() and (type == "Disc" or type == 'Spell' or type == 'AA' or type == 'Item') then return false end
+    if mq.TLO.Me.Feigning() and (feign or type == "Disc" or type == 'Spell' or type == 'AA' or type == 'Item') then return false end
     if mq.TLO.Cast.Timing() ~= 0 and type ~= "Cmd" and type ~= "Skill" then return false end
     if mq.TLO.Me.Moving() and type ~= "Cmd" and type ~= "Skill" then return false end
 
@@ -93,7 +114,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
     end
 end
 
-function mod.doAbility(name,type,tartype,memdelay)
+function mod.doAbility(name,type,tartype,memdelay,data)
     write.Trace('doAbility function')
     local delay = 0
     local cmd = nil
@@ -116,8 +137,9 @@ function mod.doAbility(name,type,tartype,memdelay)
             end
         end
         if not mq.TLO.Me.Gem(rankname)() then
-            if not state.canmem then return false end
+            if not state.canmem or data == "Heal" then return false end
             delay = mq.TLO.Spell(rankname).RecastTime()
+            if not mq.TLO.Plugin("MQ2MMOFastMem").IsLoaded() then delay = delay + 2000 end
             write.Info('Using ' .. type .. ' ' .. name)
             mq.cmd(cmd)
             local start = mq.gettime()
@@ -178,6 +200,20 @@ function mod.doAbility(name,type,tartype,memdelay)
         if delay > memdelay then write.Info('Cast will take too long for memmed spell, skipping..') return false, 0 end
     end
     write.Info('Using ' .. type .. ' ' .. name)
+
+    if data == "Rez" and mq.TLO.Target.Distance3D() >= 10 then
+        mq.cmd('/squelch /corpse')
+        mq.delay(100)
+    end
+    if data == "Rez" and mq.TLO.Target.Type() == "Corpse" then
+        state.corpsetimers[mq.TLO.Target.ID()] = mq.gettime()
+    end
+    if data == "HoT" then
+        state.hotTimers[mq.TLO.Target.ID()] = mq.gettime()
+    end
+    if data == "AE HoT" then
+        state.hotTimers[0] = mq.gettime()
+    end
     mq.cmd(cmd)
 
     local starttime = mq.gettime()
@@ -189,6 +225,7 @@ function mod.doAbility(name,type,tartype,memdelay)
 
     state.casting = true
     while (mq.gettime() - starttime) < delay do
+        local heals = require('routines.heal')
         write.Trace('New doAbility loop')
         mq.delay(10)
         state.updateLoopState()
@@ -198,14 +235,27 @@ function mod.doAbility(name,type,tartype,memdelay)
             mq.cmdf('/squelch /nav locxyz %s %s %s',state.campxloc,state.campyloc,state.campzloc)
         end
         if state.interrupted then write.Info('Cast Interrupted') return false, math.huge end
-        if tartype ~= 'None' and (mq.TLO.Target.Type() == 'Corpse' or mq.TLO.Target.ID() == 0) then write.Info('Target is dead or no valid target') return false, math.huge end
+        if tartype ~= 'None' and data ~= "Rez" and (mq.TLO.Target.Type() == 'Corpse' or mq.TLO.Target.ID() == 0) then write.Info('Target is dead or no valid target') return false, math.huge end
+        if data == "Rez" and mq.TLO.Target.ID() == 0 then write.Info('No valid target rez routine') return false, math.huge end
         if tartype ~= 'None' and mq.TLO.Target() then
             if mq.TLO.Target.Distance3D() >= mq.TLO.Spell(rankname).Range() then 
                 write.Info('Target out of range')
                 return false, math.huge
             end
         end
+        local healabil, routine = heals.doHeals()
+        if healabil and healabil.emergheal and data ~= "Rez" and data ~= "Heal" then
+            state.nextAbil[1], state.nextAbil[2] = healabil, routine
+            write.Info('Interrupting to Heal')
+            mq.cmd('/stopcast')
+            return false, math.huge
+        end
         combat.checkPet()
+    end
+    if data == "Rez" then
+        mq.delay(100)
+        mq.doevents('eventCannotRez')
+        mq.doevents('eventCannotRez2')
     end
     state.casting = false
     return true, math.huge

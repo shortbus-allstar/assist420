@@ -47,10 +47,11 @@ local state = {
     chaseSpawn = nil,
     config = conf.getConfig(),
     cooldowns = {},
+    corpsetimers = {},
     dead = false,
     facetimer = 0,
     githubver = getGitHubVersion(),
-    loglevel = 'debug',
+    hotTimers = {},
     maname = nil,
     medding = false,
     needInitAggro = true,
@@ -84,12 +85,9 @@ end
 
 local function getRoutineOrder()
     local routines = {
-        [1] = 'heals'
     }
     for k, v in pairs(state.config.routines) do
-        if k ~= 'heals' then
-            routines[v] = k
-        end
+        routines[v] = k
     end
     if #routines ~= 5 then write.Fatal('Number of routines was declared incorrectly, make sure the routines are defined in your config file and try again.') end
     return routines
@@ -114,25 +112,41 @@ local function processConditionRoutine()
         end
     end
     state.nextAbil[1], state.nextAbil[2] = doConditions()
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
+end
+
+local function processHealRoutine()
+    local heals = require('routines.heal')
+    state.nextAbil[1], state.nextAbil[2] = heals.doHeals()
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
 end
 
 local function whatNext()
     local routineList = getRoutineOrder()
     
-    for _, routine in ipairs(routineList) do
-        --[[
+    for _, routine in pairs(routineList) do
         if routine == 'heals' then
-            processHeals()
+            local success = processHealRoutine()
+            if success then return end
+        --[[
         elseif routine == 'buffs' then
             processBuffs()
         elseif routine == 'debuffs' then
             processDebuffs()
         elseif routine == 'charm' then
             processCharm()
-        else
             ]]--
-        if routine == 'conditions' then
-            processConditionRoutine()
+        elseif routine == 'conditions' then
+            local success = processConditionRoutine()
+            if success then return end
         end
     end
 end
@@ -156,7 +170,7 @@ function state.updateLoopState()
         state.config.returnToCamp = false
         mq.cmd('/dgtell ' .. mq.TLO.Me.Name() .. ':: Setting return to camp false. No camp loc declared.')
     end
-    write.loglevel = state.loglevel
+    write.loglevel = state.config.loglevel
     mq.doevents()
     if mq.TLO.Me.Feigning() and state.config.movement == 'auto' and not state.paused and not state.config.feignOverride then
         local result, err = load('return ' .. state.config.standcond, nil, 't', { mq = mq })
