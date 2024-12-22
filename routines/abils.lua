@@ -38,12 +38,15 @@ mod.healAbilTemplate = {
     name = 'Enter Name Here',
     type = 'Spell',
     cond = 'true',
+    healpct = 100,
     priority = 1,
     loopdel = 0,
     abilcd = 10,
     active = true,
     cure = false,
-    curetype = "Poison",
+    curetype = {
+        "Poison",
+    },
     rez = false,
     usextar = true,
     usegrouptank = true,
@@ -56,30 +59,77 @@ mod.healAbilTemplate = {
     hot = false,
 }
 
+mod.buffAbilTemplate = {
+    name = 'Enter Name Here',
+    buffname = "Buff Name Here",
+    type = 'Spell',
+    cond = 'true',
+    priority = 1,
+    loopdel = 0,
+    abilcd = 10,
+    active = true,
+    usegrouptank = true,
+    usegroup = true,
+    useself = true,
+    usepets = true,
+    othertargets = {},
+    overrides = {}
+}
+
+mod.debuffAbilTemplate = {
+    name = 'Enter Name Here',
+    debuffname = 'Debuff Name Here',
+    type = 'Spell',
+    cond = 'true',
+    priority = 1,
+    loopdel = 0,
+    abilcd = 10,
+    active = true,
+    ae = false,
+    aemin = 2,
+    overrides = {}
+}
+
 function mod.loadAbilCond(cond)
-    local result, err = load('return ' .. cond, nil, 't', { mq = mq })
-    if result then
-        local success, value = pcall(result)
-        if success then
-            return value
-        else
-            write.Error('Error during condition pcall: ' .. value)
+    local func
+    if cond:match("^%s*function") then
+        -- If the string starts with "function", ensure it's wrapped with "return"
+        local result, err = load("return " .. cond, nil, "t", { mq = mq, write = write, print = print })
+        if not result then
+            write.Error("Error during function load: " .. err)
             return false
         end
+        func = result
     else
-        write.Error('Error during condition load: ' .. err)
+        -- Otherwise, assume it's an expression to return a value
+        local result, err = load("return " .. cond, nil, "t", { mq = mq, write = write, print = print })
+        if not result then
+            write.Error("Error during expression load: " .. err)
+            return false
+        end
+        func = result
+    end
+
+    -- Execute the loaded function safely
+    local success, value = pcall(func)
+    if not success then
+        write.Error("Error during condition execution: " .. value)
         return false
     end
+
+    return value
 end
+
+
 
 function mod.isAbilReady(name,type,abilcd,feign)
     if state.cooldowns[name] then
-        if (mq.gettime() - state.cooldowns[name]) < abilcd then return false end
+        if (mq.gettime() - state.cooldowns[name]) < abilcd then write.Debug('CD not ready') return false end
     end
-    if not lib.inControl() then return false end
-    if mq.TLO.Me.Feigning() and (feign or type == "Disc" or type == 'Spell' or type == 'AA' or type == 'Item') then return false end
-    if mq.TLO.Cast.Timing() ~= 0 and type ~= "Cmd" and type ~= "Skill" then return false end
-    if mq.TLO.Me.Moving() and type ~= "Cmd" and type ~= "Skill" then return false end
+    if not lib.inControl() then write.Debug('Not in control') return false end
+    if mq.TLO.Me.Feigning() and (feign or type == "Disc" or type == 'Spell' or type == 'AA' or type == 'Item') then write.Debug('You are feigned') return false end
+    if (mq.TLO.Me.Casting() or state.class == "BRD") and type ~= "Cmd" and type ~= "Skill" then write.Debug('Already casting') return false end
+    if mq.TLO.Me.Moving() and type ~= "Cmd" and type ~= "Skill" then write.Debug('Moving') return false end
 
     if type == 'Cmd' then return true end
 
@@ -90,6 +140,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
     if type == 'Spell' then 
         local rankname = mq.TLO.Spell(name).RankName() or name
         if rankname then 
+            if mq.TLO.Spell(rankname).Mana() >= mq.TLO.Me.CurrentMana() then write.Info('Not enough mana') return false end
             if not mq.TLO.Me.Gem(rankname)() then
                 return true
             end
@@ -98,7 +149,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
             write.Error('Rankname was nil in readycheck. Spell name is likely incorrectly spelled. Spell name declared as ' .. name)
             return false
         end
-        if mq.TLO.Cast.Timing() ~= 0 or mq.TLO.Me.Moving() then return false end
+        if (mq.TLO.Cast.Timing() ~= 0 or mq.TLO.Me.Moving()) and state.class ~= "BRD" then return false end
     end
 
     if type == 'Disc' then
@@ -115,6 +166,8 @@ function mod.isAbilReady(name,type,abilcd,feign)
 end
 
 function mod.doAbility(name,type,tartype,memdelay,data)
+    if state.paused then return false, 0 end
+    if mq.TLO.Me.Casting() and state.class ~= "BRD" then return false, 0 end
     write.Trace('doAbility function')
     local delay = 0
     local cmd = nil
@@ -130,21 +183,28 @@ function mod.doAbility(name,type,tartype,memdelay,data)
     if type == 'Spell' and mq.TLO.Spell(rankname).Mana() and mq.TLO.Me.CurrentMana() >= mq.TLO.Spell(rankname).Mana() then
         cmd = string.format('/casting "%s" gem%s',mq.TLO.Spell(rankname).RankName(),state.config.miscGem)
         delay = mq.TLO.Spell(rankname).MyCastTime() + 1250
-        if tartype ~= 'None' and mq.TLO.Target() then
-            if mq.TLO.Target.Distance3D() >= mq.TLO.Spell(rankname).Range() then 
+        if tartype ~= 'None' and mq.TLO.Target() and mq.TLO.Spell(rankname).TargetType() ~= "Self" then
+            local spellRange = mq.TLO.Spell(rankname).AERange()
+            if spellRange == 0 then spellRange = mq.TLO.Spell(rankname).MyRange() end
+            if mq.TLO.Target.Distance3D() >= spellRange then 
                 write.Info('Target out of range')
                 return false, 0
             end
         end
         if not mq.TLO.Me.Gem(rankname)() then
             if not state.canmem or data == "Heal" then return false end
-            delay = mq.TLO.Spell(rankname).RecastTime()
-            if not mq.TLO.Plugin("MQ2MMOFastMem").IsLoaded() then delay = delay + 2000 end
-            write.Info('Using ' .. type .. ' ' .. name)
+            delay = mq.TLO.Spell(rankname).RecastTime() + 500
+            write.Info('Memming ' .. type .. ' ' .. name)
             mq.cmd(cmd)
+            local tarid = mq.TLO.Target.ID()
+            mq.delay(10)
+            repeat
+                mq.delay(10)
+            until mq.TLO.Window('SpellBookWnd')() == "FALSE"
+            mq.cmd('/interrupt')
             local start = mq.gettime()
             if delay < 1600 then
-                delay = mq.TLO.Spell(rankname).RecastTime() + mq.TLO.Spell(rankname).MyCastTime() + 3000
+                delay = mq.TLO.Spell(rankname).RecastTime() + mq.TLO.Spell(rankname).MyCastTime()
                 mq.delay(delay)
                 return true
             else
@@ -154,8 +214,13 @@ function mod.doAbility(name,type,tartype,memdelay,data)
                     if state.paused then return false end
                     state.activeQueue(delay)
                 end
+                if mq.TLO.Target.ID() ~= tarid then
+                    mq.cmdf('/squelch /mqt id %s',tarid)
+                    mq.delay(350)
+                end
                 write.Info('Using ' .. type .. ' ' .. name)
                 mq.cmd(cmd)
+                mq.delay(1000)
                 state.canmem = true
             end
             return true, math.huge
@@ -165,9 +230,9 @@ function mod.doAbility(name,type,tartype,memdelay,data)
         return false, 0
     end
 
-    if type == 'Disc' and mq.TLO.Spell(rankname).EnduranceCost() and mq.TLO.Me.CurrentEndurance() >= mq.TLO.Spell(rankname).EnduranceCost() then 
+    if type == 'Disc' and mq.TLO.Spell(rankname).EnduranceCost() and mq.TLO.Me.CurrentEndurance() >= mq.TLO.Spell(rankname).EnduranceCost() and mq.TLO.Spell(rankname).TargetType() ~= "Spell" then 
         if tartype ~= 'None' and mq.TLO.Target() then
-            if (mq.TLO.Target.Distance3D() or math.huge) >= mq.TLO.Spell(rankname).Range() then 
+            if (mq.TLO.Target.Distance3D() or math.huge) >= mq.TLO.Spell(rankname).MyRange() then 
                 write.Info('Target out of range')
                 return false, 0
             end
@@ -197,7 +262,7 @@ function mod.doAbility(name,type,tartype,memdelay,data)
 
     if not cmd then write.Error('Error: cmd variable never declared. Ability type likely invalid. Type was passed to function as ' .. type) return false, 0 end
     if memdelay then
-        if delay > memdelay then write.Info('Cast will take too long for memmed spell, skipping..') return false, 0 end
+        if delay > memdelay then write.Debug('Cast will take too long for memmed spell, skipping..') return false, 0 end
     end
     write.Info('Using ' .. type .. ' ' .. name)
 
@@ -234,11 +299,14 @@ function mod.doAbility(name,type,tartype,memdelay,data)
             write.Info('Returning to camp')
             mq.cmdf('/squelch /nav locxyz %s %s %s',state.campxloc,state.campyloc,state.campzloc)
         end
+        if not mq.TLO.Me.Casting then state.interrupted = true end
         if state.interrupted then write.Info('Cast Interrupted') return false, math.huge end
         if tartype ~= 'None' and data ~= "Rez" and (mq.TLO.Target.Type() == 'Corpse' or mq.TLO.Target.ID() == 0) then write.Info('Target is dead or no valid target') return false, math.huge end
         if data == "Rez" and mq.TLO.Target.ID() == 0 then write.Info('No valid target rez routine') return false, math.huge end
-        if tartype ~= 'None' and mq.TLO.Target() then
-            if mq.TLO.Target.Distance3D() >= mq.TLO.Spell(rankname).Range() then 
+        if tartype ~= 'None' and mq.TLO.Target() and mq.TLO.Spell(rankname).TargetType() ~= "Self" then
+            local spellRange = mq.TLO.Spell(rankname).AERange()
+            if spellRange == 0 then spellRange = mq.TLO.Spell(rankname).MyRange() end
+            if mq.TLO.Target.Distance3D() >= spellRange then 
                 write.Info('Target out of range')
                 return false, math.huge
             end
@@ -250,7 +318,20 @@ function mod.doAbility(name,type,tartype,memdelay,data)
             mq.cmd('/stopcast')
             return false, math.huge
         end
+        if data == "Heal" and (mq.TLO.Target.PctHPs() or 0) > state.config.cancelHealsAt then
+            write.Info('Cancelling Heal')
+            mq.cmd('/stopcast')
+            return false, math.huge
+        end
         combat.checkPet()
+    end
+    if data ~= "charm" then
+        state.charmbreak = lib.checkCharm()
+        if state.charmbreak then
+            write.Info('Interrupting for charm break')
+            mq.cmd('/stopcast')
+            return false, math.huge 
+        end
     end
     if data == "Rez" then
         mq.delay(100)
@@ -286,6 +367,11 @@ function mod.targetHandling(tartype,custtar)
     return id
 end
 
+function mod.processCharm(abiltable)
+    if state.paused then return false end
+    if not mod.isAbilReady(abiltable.name,abiltable.type,0,false) then return false end
+    return abiltable, 'charm'
+end
 
 function mod.processAbility(abiltable)
     if state.paused then return false end
@@ -295,6 +381,19 @@ function mod.processAbility(abiltable)
     if not mod.loadAbilCond(abiltable.cond) then return false end
     if state.config.feignOverride and abiltable.feign then return false end
     return abiltable, 'conditions'
+end
+
+function mod.activateCharm(abiltable)
+    local tarid = mod.targetHandling("Custom Lua ID",state.currentpet)
+    if mq.TLO.Target.ID() ~= tarid then
+        mq.cmdf('/squelch /mqt id %s',tarid)
+        write.Info('Targeting: %s',mq.TLO.Spawn(tarid).CleanName())
+        mq.delay(300)
+    end
+    local success = mod.doAbility(abiltable.name,abiltable.type,"Custom Lua ID",math.huge,"charm")
+    if success then
+        state.charmbreak = false
+    end
 end
 
 function mod.activateAbility(abiltable,delay)

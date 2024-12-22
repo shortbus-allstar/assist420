@@ -23,7 +23,7 @@ local initial_loglevels = {
 }
 
 -- What level the call string (file and line numbers) should show at.  Default is debug.  When the log level is this or below, it is on for all levels.
-Write.callstringlevel = initial_loglevels['debug'].level
+Write.callstringlevel = initial_loglevels['info'].level
 
 -- Handle add/remove for log levels
 local loglevels_mt = {

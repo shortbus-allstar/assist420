@@ -26,6 +26,8 @@ function mod.checkNav()
     if state.config.movement ~= 'auto' then return end
     if state.pulling then return end
     if mq.TLO.Me.Combat() and mq.TLO.Me.CombatState() == 'COMBAT' then return end
+    if lib.combatStatus() ~= "out" and (state.chaseSpawn.Distance3D() or 0) <= state.config.campRadius then return end
+    if mq.TLO.Me.Casting() and state.class ~= "BRD" then return end
     if state.config.chaseAssist and (state.chaseSpawn.Distance3D() or 0) >= state.config.chaseDistance and (state.chaseSpawn.Distance3D() or math.huge) <= state.config.chaseMaxDistance and not mq.TLO.Navigation.Active() and state.chaseSpawn.Type() ~= 'Corpse' and mq.TLO.Navigation.PathExists('id ' .. state.chaseSpawn.ID())() then
         write.Info('Chasing main assist')
         mq.cmdf('/squelch /nav id %s dist=%s',state.chaseSpawn.ID(),state.config.chaseDistance)
@@ -88,7 +90,7 @@ function mod.checkPullStatus()
     end
 
     if mq.TLO.Me.Feigning() then return false end
-    if mq.TLO.Cast.Timing() ~= 0 then return false end
+    if mq.TLO.Cast.Timing() ~= 0 and state.class ~= "BRD" then return false end
     if lib.fullAggro() then return false end
 
     local grpMems = mq.TLO.Group.GroupSize() or 1
@@ -175,7 +177,7 @@ function mod.iAmPulling(tar,pullCmd)
     (state.campyloc - state.config.campRadius < mq.TLO.Me.Y() and mq.TLO.Me.Y() < state.campyloc + state.config.campRadius) and 
     (state.campzloc - 5 < mq.TLO.Me.Z() and mq.TLO.Me.Z() < state.campzloc + 5)) and not mq.TLO.Navigation.Active() and 
     mq.TLO.Navigation.PathExists('locxyz '.. state.campxloc .. ' ' .. state.campyloc .. ' ' .. state.campzloc)() and mq.TLO.Me.CombatState() == 'COMBAT' and 
-    mq.TLO.Cast.Timing() == 0 and (mq.TLO.Target.PctAggro() or 0) == 100 then
+    (mq.TLO.Cast.Timing() == 0 or state.class == "BRD") and (mq.TLO.Target.PctAggro() or 0) == 100 then
         return 'aggro'
     end
 
@@ -277,5 +279,3 @@ end
 
 
 return mod
-
-

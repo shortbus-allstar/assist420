@@ -31,7 +31,7 @@ function mod.doMed()
     if state.config.movement ~= 'auto' then return end
     local shouldIMed = mod.checkMed()
     if not shouldIMed then return
-    elseif state.medding == true and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and mq.TLO.Cast.Timing() == 0 then 
+    elseif state.medding == true and not mq.TLO.Me.Sitting() and not mq.TLO.Me.Moving() and (not mq.TLO.Me.Casting() or state.class == "BRD") then 
         mq.cmd('/sit')
         write.Info('Sitting down to med')
     end

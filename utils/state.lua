@@ -38,17 +38,22 @@ end
 
 local state = {
     assistSpawn = nil,
+    buffqueue = {},
     campxloc = nil,
     campyloc = nil,
     campzloc = nil,
     casting = false,
     class = mq.TLO.Me.Class.ShortName(),
     canmem = true,
+    charmbreak = false,
     chaseSpawn = nil,
     config = conf.getConfig(),
     cooldowns = {},
     corpsetimers = {},
+    curequeue = {},
+    currentpet = nil,
     dead = false,
+    debufftimer = 0,
     facetimer = 0,
     githubver = getGitHubVersion(),
     hotTimers = {},
@@ -65,7 +70,7 @@ local state = {
     pullIgnores = {},
     queueCombat = {},
     queueOOC = {},
-    version = 'v2.0.0-alpha',
+    version = 'v1.0.1-beta',
 }
 
 local function doConditions()
@@ -120,8 +125,49 @@ local function processConditionRoutine()
 end
 
 local function processHealRoutine()
+    write.Trace('ProcessHealRoutine function')
+    if not state.config.doHealing then return end
     local heals = require('routines.heal')
     state.nextAbil[1], state.nextAbil[2] = heals.doHeals()
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
+end
+
+local function processDebuffRoutine()
+    if not state.config.doDebuffs then return end
+    local debuffs = require('routines.debuff')
+    write.Trace('processDebuff routine')
+    state.nextAbil[1], state.nextAbil[2] = debuffs.doDebuffs()
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
+end
+
+local function processCharmRoutine()
+    if not state.config.doCharm then return end
+    if state.charmbreak ~= true then return end
+    local abiltable = {
+        name = state.config.charmSpell,
+        type = state.config.charmType
+    }
+    state.nextAbil[1], state.nextAbil[2] = abiltable, "charm"
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
+end
+
+local function processBuffRoutine()
+    if not state.config.doBuffs then return end
+    local buffs = require('routines.buff')
+    write.Trace('processBuffRoutine')
+    state.nextAbil[1], state.nextAbil[2] = buffs.doBuffs()
     if state.nextAbil[1] and state.nextAbil[2] then
         return true
     else
@@ -136,20 +182,49 @@ local function whatNext()
         if routine == 'heals' then
             local success = processHealRoutine()
             if success then return end
-        --[[
-        elseif routine == 'buffs' then
-            processBuffs()
         elseif routine == 'debuffs' then
-            processDebuffs()
+            local success = processDebuffRoutine()
+            if success then return end
+        elseif routine == 'buffs' then
+            local success = processBuffRoutine()
+            if success then return end
         elseif routine == 'charm' then
-            processCharm()
-            ]]--
+            local success = processCharmRoutine()
+            if success then return end
         elseif routine == 'conditions' then
             local success = processConditionRoutine()
             if success then return end
         end
     end
 end
+
+local function checkAsynchronousRemovals()
+    -- Check Buff Queue
+    for i = #state.buffqueue, 1, -1 do
+        local entry = state.buffqueue[i]
+        local abil = entry.ability
+        -- Conditions:
+        -- 1. mq.TLO.Target.ID() == entry.requesterID
+        -- 2. mq.TLO.Me.Casting.Name() == abil.name
+        if mq.TLO.Target.ID() == entry.requesterID and mq.TLO.Me.Casting.Name() == abil.name then
+            -- Remove this ability from the buff queue
+            table.remove(state.buffqueue, i)
+            write.Debug(("Removed buff ability %s from queue based on async conditions."):format(abil.name))
+        end
+    end
+
+    -- Check Cure Queue
+    for i = #state.curequeue, 1, -1 do
+        local entry = state.curequeue[i]
+        local abil = entry.ability
+        if mq.TLO.Target.ID() == entry.requesterID and mq.TLO.Me.Casting.Name() == abil.name then
+            -- Remove this cure ability from the cure queue
+            table.remove(state.curequeue, i)
+            write.Debug(("Removed cure ability %s from queue based on async conditions."):format(abil.name))
+        end
+    end
+end
+
 
 function state.updateLoopState()
     write.Trace('Update Loop State Function')
@@ -165,7 +240,19 @@ function state.updateLoopState()
     local lib = require('utils.lib')
     state.assistSpawn = lib.getAssistTarget()
     state.chaseSpawn = lib.getChaseTarget()
+    checkAsynchronousRemovals()
     whatNext()
+    state.charmbreak = lib.checkCharm()
+    if state.charmbreak == true and state.nextAbil[2] ~= "charmBreak" then
+        local abils = require("routines.abils")
+        local abiltable = {
+            name = state.config.charmBreakSpell,
+            type = state.config.charmBreakType
+        }
+        if abils.isAbilReady(abiltable.name,abiltable.type,0,false) then
+            state.nextAbil[1], state.nextAbil[2] = abiltable, "charmBreak"
+        end
+    end
     if not state.campxloc and state.config.returnToCamp then
         state.config.returnToCamp = false
         mq.cmd('/dgtell ' .. mq.TLO.Me.Name() .. ':: Setting return to camp false. No camp loc declared.')

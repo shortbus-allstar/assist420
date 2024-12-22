@@ -18,7 +18,7 @@ function mod.doFacing()
     if mq.TLO.Target.Aggressive() and (mq.gettime() - state.facetimer) > 3000 and not mq.TLO.Me.Moving() then 
         mq.cmd('/squelch /face fast') 
         state.facetimer = mq.gettime()
-    elseif not mq.TLO.Target.Aggressive() and not string.find(mq.TLO.Target.CleanName() or "", "Combat Dummy") and mq.TLO.Me.Combat() then
+    elseif not mq.TLO.Target.Aggressive() and mq.TLO.Me.Combat() then
         mq.cmd('/attack off')
         return false
     end

@@ -352,10 +352,38 @@ end
 
 function mod.processHeal(abiltable,cure,rez,hot)
     local abils = require('routines.abils')
-    if state.paused then return nil end
-    if not abiltable.active then return nil end
-    if not abils.isAbilReady(abiltable.name,abiltable.type,abiltable.abilcd,false) then return nil end
-    if not abils.loadAbilCond(abiltable.cond) then return nil end
+    local tarDistance = mq.TLO.Spawn(abiltable.tarid).Distance3D() or 0 
+    local spell = nil
+    local spellInfo = mq.TLO.Spell(abiltable.name)
+    local rankname = (spellInfo and spellInfo.RankName()) or abiltable.name
+    if state.paused == true then write.Debug('Paused') return nil end
+    if not abiltable.active then write.Debug('Abil not active') return nil end
+    if not abils.isAbilReady(abiltable.name,abiltable.type,abiltable.abilcd,false) then write.Debug('Abil not ready') return nil end
+    if not abils.loadAbilCond(abiltable.cond) then write.Debug('Cond not true') return nil end
+    if (mq.TLO.Spawn(abiltable.tarid).PctHPs() or 0) > abiltable.healpct then 
+        write.Debug('healpct not high enough ability: %s, healpct: %s, tarpct: %s',abiltable.name,abiltable.healpct,(mq.TLO.Spawn(abiltable.tarid).PctHPs() or 0))
+        return nil 
+    end
+    if abiltable.type == "AA" then
+        spell = mq.TLO.Me.AltAbility(rankname).Spell
+    elseif abiltable.type == "Spell" or abiltable.type == "Disc" then 
+        spell = mq.TLO.Spell(rankname)
+    elseif abiltable.type == "Item" then 
+        spell = mq.TLO.FindItem(rankname).Spell
+    end
+    if abiltable.type == "Spell" and not mq.TLO.Me.Gem(rankname)() and not cure and not rez then write.Debug('Heal not memmed') return nil end
+
+    local spellRange = 0
+
+    if spell and spell.MyRange() then 
+        spellRange = spell.AERange()
+        if spellRange == 0 then spellRange = spell.MyRange() end
+        
+        write.Debug(tarDistance)
+        write.Debug(spell.MyRange() or "nil")
+        if tarDistance >= spellRange and spell.TargetType() ~= "Self" then write.Info('Target out of Range') return nil end
+    end
+    
     return abiltable, 'heals', cure, rez, hot
 end
 
@@ -385,7 +413,25 @@ function mod.activateHeal(abiltable,delay,cure,rez,hot)
     return abildelay
 end
 
+local function contains(table, val)
+    for _, value in ipairs(table) do
+        if value == val then
+            return true
+        end
+    end
+    return false
+end
+
+local healtypeMap = {
+    poison = 'Poison',
+    disease = 'Disease',
+    curse = 'Curse',
+    corr = 'Corruption',
+    det = 'Detrimental'
+}
+
 function mod.doHeals()
+    write.Debug('Checking Heals')
     if state.paused then return nil, nil end
     local healabils = state.config.healabils[state.class]
     local queue = "heals"
@@ -393,6 +439,15 @@ function mod.doHeals()
     local healTargets = mod.getHealingTargets()
     if not healTargets or #healTargets == 0 then
         write.Debug("No heal targets found.")
+        if #state.curequeue > 0 then
+            local request = state.curequeue[1]
+            local id = request.requesterID
+            local abil = request.ability
+    
+            abil["tarid"] = id
+    
+            return abil, queue
+        end
         return nil, nil
     end
 
@@ -403,96 +458,58 @@ function mod.doHeals()
 
         local healtargetprint = type(healtarget) ~= "number" and healtarget or mq.TLO.Spawn(healtarget).CleanName()
 
-        write.Warn("Target: %s, Healtype: %s, GroupCure: %s", healtargetprint, healtype, tostring(groupcureok))
+        write.Debug("Target: %s, Healtype: %s, GroupCure: %s", healtargetprint, healtype, tostring(groupcureok))
 
-        for _, abil in pairs(healabils) do
+        for _, abil in ipairs(healabils) do
+            if type(healtarget) == "number" then abil["tarid"] = healtarget else abil["tarid"] = healtarget.ID() end 
             if not mod.processHeal(abil, abil.cure, abil.rez) then
-                -- Continue to next ability
+                write.Debug('skipping abil %s',abil.name)
             else
-                if abil.cure then
+                if abil.cure and not (healtarget == mq.TLO.Me.ID() and not abil.useself) and not (healtarget ~= mq.TLO.Me.ID() and not abil.usegroupmember) then
                     if groupcureok ~= nil then
+                        local healtypeFormatted = healtypeMap[healtype]
+                        if healtypeFormatted == nil then
+                            write.Error('Unknown healtype: %s', healtype)
+                            return nil, nil
+                        end
+                    
                         if groupcureok == true then
-                            if healtype == 'poison' and abil.curetype == 'Poison' and abil.aeheal then
-                                abil["tarid"] = healtarget
+                            -- First, attempt to use AE cure abilities
+                            if contains(abil.curetype, healtypeFormatted) and abil.aeheal then
+                                abil["tarid"] = healtarget -- healtarget is likely a group ID or similar
                                 return abil, queue
                             end
-                            if healtype == 'disease' and abil.curetype == 'Disease' and abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'curse' and abil.curetype == 'Curse' and abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'corr' and abil.curetype == 'Corruption' and abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'det' and abil.curetype == 'Detrimental' and abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'poison' and abil.curetype == 'Poison' then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'disease' and abil.curetype == 'Disease' then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'curse' and abil.curetype == 'Curse' then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'corr' and abil.curetype == 'Corruption' then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'det' and abil.curetype == 'Detrimental' then
+                            -- If no AE cure ability is available, fall back to any ability that can cure the ailment
+                            if contains(abil.curetype, healtypeFormatted) then
                                 abil["tarid"] = healtarget
                                 return abil, queue
                             end
                         elseif groupcureok == false then
-                            if healtype == 'poison' and abil.curetype == 'Poison' and not abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'disease' and abil.curetype == 'Disease' and not abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'curse' and abil.curetype == 'Curse' and not abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'corr' and abil.curetype == 'Corruption' and not abil.aeheal then
-                                abil["tarid"] = healtarget
-                                return abil, queue
-                            end
-                            if healtype == 'det' and abil.curetype == 'Detrimental' and not abil.aeheal then
-                                abil["tarid"] = healtarget
+                            -- Use single-target cures when group cures are not appropriate
+                            if contains(abil.curetype, healtypeFormatted) and not abil.aeheal then
+                                abil["tarid"] = healtarget -- healtarget is an object; get its ID
                                 return abil, queue
                             end
                         end
                     end
                 else
-                    if healtype == 'AE Emergency' and abil.aeheal and abil.emergheal then
+                    if healtype == 'AE Emergency' and abil.aeheal and abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Self Emergency' and abil.useself and abil.emergheal then
+                    if healtype == 'Self Emergency' and abil.useself and abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Group Tank Emergency' and abil.usegrouptank and abil.emergheal then
+                    if healtype == 'Group Tank Emergency' and abil.usegrouptank and abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Other Tank Emergency' and abil.useothertank and abil.emergheal then
+                    if healtype == 'Other Tank Emergency' and abil.useothertank and abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Group Member Emergency' and abil.usegroupmember and abil.emergheal then
+                    if healtype == 'Group Member Emergency' and abil.usegroupmember and abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
@@ -503,50 +520,49 @@ function mod.doHeals()
                         return abil, queue
                     end
                     -- AE Heal
-                    if healtype == 'AE' and abil.aeheal and not abil.emergheal then
+                    if healtype == 'AE' and abil.aeheal and not abil.emergheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
                     -- Regular Heals
-                    if healtype == 'Group Tank' and abil.usegrouptank and not abil.emergheal then
+                    if healtype == 'Group Tank' and abil.usegrouptank and not abil.emergheal and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Self' and abil.useself and not abil.emergheal then
+                    if healtype == 'Self' and abil.useself and not abil.emergheal and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Group Member' and abil.usegroupmember and not abil.emergheal then
+                    if healtype == 'Group Member' and abil.usegroupmember and not abil.emergheal and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'Other Tank' and abil.useothertank and not abil.emergheal then
+                    if healtype == 'Other Tank' and abil.useothertank and not abil.emergheal and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
                     -- Check Group Rezzes
-                    if healtype == 'Group Rez' and abil.rez and abil.usegroupmember then
+                    if healtype == 'Group Rez' and abil.rez and abil.usegroupmember and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
-                        write.Warn(abil.name)
                         return abil, queue
                     end
                     -- XTarget Heals
-                    if healtype == 'XTarget' and abil.usextar then
+                    if healtype == 'XTarget' and abil.usextar and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
                     -- Group Pets
-                    if healtype == 'Group Pet' and abil.usepets then
+                    if healtype == 'Group Pet' and abil.usepets and not abil.rez and not abil.aeheal then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
                     -- AE HoT
-                    if healtype == 'AE HoT' and abil.aeheal and abil.hot then
+                    if healtype == 'AE HoT' and abil.aeheal and abil.hot and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
                     -- Single Target HoT
-                    if healtype == 'HoT' and abil.hot and not abil.aeheal then
+                    if healtype == 'HoT' and abil.hot and not abil.aeheal and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
@@ -560,34 +576,34 @@ function mod.doHeals()
 
                     --No spell found, ditch emerg tags
 
-                    if (healtype == 'AE Emergency' or healtype == "AE") and abil.aeheal and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'AE Emergency') and abil.aeheal and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if (healtype == 'Self Emergency' or healtype == "Self") and abil.useself and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'Self Emergency') and abil.useself and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if (healtype == 'Group Tank Emergency' or healtype == "Group Tank") and abil.usegrouptank and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'Group Tank Emergency') and abil.usegrouptank and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if (healtype == 'Other Tank Emergency' or healtype == "Other Tank") and abil.useothertank and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'Other Tank Emergency') and abil.useothertank and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if (healtype == 'Group Member Emergency' or healtype == "Group Member") and abil.usegroupmember and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'Group Member Emergency') and abil.usegroupmember and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
 
                     --Still no spell found, ditch ae tags
 
-                    if (healtype == 'AE Emergency' or healtype == "AE") and not abil.cure and not abil.rez and not abil.hot then
+                    if (healtype == 'AE Emergency') and not abil.cure and not abil.rez and not abil.hot then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
-                    if healtype == 'AE HoT' and abil.hot then
+                    if healtype == 'AE HoT' and abil.hot and not abil.rez then
                         abil["tarid"] = healtarget.ID()
                         return abil, queue
                     end
@@ -596,7 +612,7 @@ function mod.doHeals()
         end
         -- If no ability found for this heal target, proceed to the next one
         local tarname = healtarget and type(healtarget) ~= "number" and healtarget.CleanName() or healtarget and mq.TLO.Spawn(healtarget).CleanName()
-        write.Error('No matching heal abilities to heal %s! Heal type: %s', tarname, healtype)
+        write.Debug('No matching heal abilities to heal %s! Heal type: %s', tarname, healtype)
     end
 
     -- No suitable ability found for any heal target
@@ -606,4 +622,5 @@ end
 
 
 return mod
+
 

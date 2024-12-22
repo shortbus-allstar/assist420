@@ -1,17 +1,12 @@
 local mq = require('mq')
-local imgui = require('ImGui')
 local config= require('interface.config')
 
 local write = require('utils.Write')
 local state = require('utils.state')
-local events = require('utils.events')
-local binds = require('utils.binds')
 local lib = require('utils.lib')
 
-local combat = require('routines.combat')
 local navigation = require('routines.navigation')
 local abils = require('routines.abils')
-local med   = require('routines.med')
 
 local anim = mq.FindTextureAnimation('A_SpellIcons')
 local classanim = mq.FindTextureAnimation('A_DragItem')
@@ -20,6 +15,9 @@ local icons = require('mq.icons')
 local BUTTON_SIZE = 55
 local editIndex = 1
 local selectedOptionIndextheme = 1
+local debuffOverrideIndex = 1
+local buffOverrideIndex = 1
+local buffTargetIndex = 1
 local frameCounter = 0
 local flashInterval = 250 
 
@@ -29,15 +27,21 @@ local shouldDrawGUI = true
 local isEditing = false
 local isEditingAggro = false
 local isEditingHeal = false
+local isEditingDebuff = false
+local isEditingBuff = false
 local shouldDrawEditor = true
 local shouldDrawAggroEditor = true
 local shouldDrawHealEditor = true
+local shouldDrawDebuffEditor = true
+local shouldDrawBuffEditor = true
+local showDebuffOverwriteWindow = false
+local showBuffTargetWindow = false
+local showBuffOverrideWindow = false
 local pickerAbilIndex = 0
 local pickerlist = state.config.abilities
 local showCustTar = false
 
 local table_flags = bit32.bor(ImGuiTableFlags.Hideable, ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter, ImGuiTableFlags.Resizable)
-local edit_flags = bit32.bor(ImGuiWindowFlags.None)
 
 local newIgnoreValue = ""
 local newassist = ""
@@ -332,6 +336,8 @@ end
 local dynamicWindowTitle = ''
 local dynamicAggroWindowTitle = ''
 local dynamicHealWindowTitle = ''
+local dynamicDebuffWindowTitle = ''
+local dynamicBuffWindowTitle = ''
 
 local function deepcopy(orig)
     local orig_type = type(orig)
@@ -352,6 +358,8 @@ local function arrangeAbils()
     table.sort(state.config.abilities[state.class], function(a, b) return a.priority < b.priority end)
     table.sort(state.config.aggroabils[state.class], function(a, b) return a.priority < b.priority end)
     table.sort(state.config.healabils[state.class], function(a, b) return a.priority < b.priority end)
+    table.sort(state.config.debuffabils[state.class], function(a, b) return a.priority < b.priority end)
+    table.sort(state.config.buffabils[state.class], function(a, b) return a.priority < b.priority end)
 end
 
 local isNameInputActive = false
@@ -387,24 +395,44 @@ local function updatePicker(list,abilIndex)
         if selected.Type == 'Spell' then
             list[state.class][abilIndex].type = selected.Type
             list[state.class][abilIndex].name = selected.Name
+            if list == state.config.buffabils then list[state.class][abilIndex].buffname = selected.Name end
+            if list == state.config.debuffabils then list[state.class][abilIndex].debuffname = selected.Name end
             Picker:ClearSelection()
         elseif selected.Type == 'Disc' then
             list[state.class][abilIndex].type = selected.Type
             list[state.class][abilIndex].name = selected.Name
+            if list == state.config.buffabils then list[state.class][abilIndex].buffname = selected.Name end
+            if list == state.config.debuffabils then list[state.class][abilIndex].debuffname = selected.Name end
             Picker:ClearSelection()
         elseif selected.Type == 'AA' then
             list[state.class][abilIndex].type = selected.Type
             list[state.class][abilIndex].name = selected.Name
+            if list == state.config.buffabils then list[state.class][abilIndex].buffname = selected.Name end
+            if list == state.config.debuffabils then list[state.class][abilIndex].debuffname = selected.Name end
             Picker:ClearSelection()
         elseif selected.Type == 'Item' then
             list[state.class][abilIndex].type = selected.Type
             list[state.class][abilIndex].name = selected.Name
+            if list == state.config.buffabils then list[state.class][abilIndex].buffname = selected.Name end
+            if list == state.config.debuffabils then list[state.class][abilIndex].debuffname = selected.Name end
             Picker:ClearSelection()
         elseif selected.Type == 'Ability' then
             list[state.class][abilIndex].type = "Skill"
             list[state.class][abilIndex].name = selected.Name
+            if list == state.config.buffabils then list[state.class][abilIndex].buffname = selected.Name end
+            if list == state.config.debuffabils then list[state.class][abilIndex].debuffname = selected.Name end
             Picker:ClearSelection()
         end
+    end
+end
+
+function DrawInfoIconWithTooltip(text)
+    ImGui.SameLine()
+    ImGui.Text(icons.FA_INFO_CIRCLE)
+    if ImGui.IsItemHovered() then
+        ImGui.BeginTooltip()
+        ImGui.Text(text)
+        ImGui.EndTooltip()
     end
 end
 
@@ -613,6 +641,64 @@ local function DrawEditDeleteHeal(ability,abilList)
         
         for i = 1, #state.config.healabils[state.class] do
             state.config.healabils[state.class][i].priority = i
+        end
+    end
+
+end
+
+local function DrawEditDeleteDebuff(ability,abilList)
+    if ImGui.Button("Edit##Debuff" .. ability.priority) then
+        isEditingDebuff = true
+        editIndex = ability.priority
+        if ability then
+            if not ability.name then
+                ability.name = 'Blank'
+            end
+            dynamicDebuffWindowTitle = "Edit Debuff Ability - " .. ability.name
+            -- Rest of your code using ability.name
+        else
+           abilList[state.class][editIndex] = {}
+           abilList[state.class][editIndex].name = 'Blank'
+           dynamicDebuffWindowTitle = "Edit Debuff Ability - " .. abilList[state.class][editIndex].name
+        end
+    end
+
+    ImGui.SameLine()
+
+    if ImGui.Button("Delete##" .. ability.priority) then
+        table.remove(abilList[state.class], ability.priority)
+        
+        for i = 1, #state.config.debuffabils[state.class] do
+            state.config.debuffabils[state.class][i].priority = i
+        end
+    end
+
+end
+
+local function DrawEditDeleteBuff(ability,abilList)
+    if ImGui.Button("Edit##Buff" .. ability.priority) then
+        isEditingBuff = true
+        editIndex = ability.priority
+        if ability then
+            if not ability.name then
+                ability.name = 'Blank'
+            end
+            dynamicBuffWindowTitle = "Edit Buff Ability - " .. ability.name
+            -- Rest of your code using ability.name
+        else
+           abilList[state.class][editIndex] = {}
+           abilList[state.class][editIndex].name = 'Blank'
+           dynamicBuffWindowTitle = "Edit Buff Ability - " .. abilList[state.class][editIndex].name
+        end
+    end
+
+    ImGui.SameLine()
+
+    if ImGui.Button("Delete##" .. ability.priority) then
+        table.remove(abilList[state.class], ability.priority)
+        
+        for i = 1, #state.config.buffabils[state.class] do
+            state.config.buffabils[state.class][i].priority = i
         end
     end
 
@@ -912,6 +998,280 @@ local function DrawEditorWindow()
     end
 end
 
+local function contains(table, val)
+    for _, value in ipairs(table) do
+        if value == val then
+            return true
+        end
+    end
+    return false
+end
+
+local function DrawDebuffEditorWindow()
+    local flags = bit32.bor(ImGuiWindowFlags.NoSavedSettings)
+    if isEditingDebuff then
+        isEditingDebuff, shouldDrawDebuffEditor = ImGui.Begin(dynamicDebuffWindowTitle, isEditingDebuff, flags)
+        if shouldDrawDebuffEditor then
+            ImGui.SetWindowSize(600, 230, ImGuiCond.FirstUseEver) -- Adjust window size as needed
+
+            -- Access the debuff ability being edited
+            local abil = state.config.debuffabils[state.class][editIndex]
+            local dropdownOptions = {"AA", "Spell", "Item", "Skill", "Disc", "Cmd"} -- Dropdown options
+
+            ImGui.Columns(2, "DebuffColumns", false) -- Split into 2 columns
+
+            -- First table
+            DrawTable("DebuffEditWin", 6, 2, {"##1", "##2"}, 115, 150, nil,
+                {
+                    -- Column 1 Labels
+                    function()
+                        ImGui.Text("Name:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup1")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup1", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput1", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.name or ""
+                                abil.name, _ = ImGui.InputTextMultiline("##InputText1", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    function()
+                        ImGui.Text("Debuff Name:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup2")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup2", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput2", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.debuffname or ""
+                                abil.debuffname, _ = ImGui.InputTextMultiline("##InputText2", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    "Type:",
+                    function()
+                        ImGui.Text("Cond:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND .. "##1", ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.cond or ""
+                                abil.cond, _ = ImGui.InputTextMultiline("##InputText", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    "AE:",
+                    "Active:"
+                },
+                {
+                    -- Column 2 Inputs
+                    function() abil.name = DrawTextInput(abil.name, "##Name", 150) end,
+                    function() abil.debuffname = DrawTextInput(abil.debuffname, "##debuffName", 150) end,
+                    function() abil.type = DrawDropdown(abil.type, "##type", dropdownOptions, 150) end,
+                    function() abil.cond = DrawTextInput(abil.cond, "##Condition", 150) end,
+                    function() abil.ae = DrawCheckbox(abil.ae,"##AE") end,
+                    function() abil.active = ImGui.Checkbox("##Active", abil.active) end
+                })
+
+
+            ImGui.NextColumn() -- Move to the next column
+
+            -- Second table (Add any additional fields if needed)
+            -- For example, you might have settings like 'Max Targets' or 'Debuff Mode'
+
+            -- Example:
+            DrawTable("DebuffEditWin2", 5, 2, {"##3", "##4"}, 75, 200, nil,
+                {
+                    "Priority:",
+                    "Loop Delay:",
+                    "Ability CD:",
+                    "AE Tar Min:",
+                    function() DrawInfoIconWithTooltip("Debuff Overrides are debuffs that this specific ability will not attempt to overwrite. The Debuff Name is checked by default.") end
+                },
+                {
+                    function() abil.priority = DrawNumberInput(abil.priority or 1, "##priority") end,
+                    function() abil.loopdel = DrawNumberInput(abil.loopdel or 0, "##loopdel") end,
+                    function() abil.abilcd = DrawNumberInput(abil.abilcd or 10, "##abilcd") end,
+                    function() abil.aemin = DrawNumberInput(abil.aemin or 2, "##aemin") end,
+                    function()  
+                        if ImGui.Button("Open Debuff Overrides",200,20) then
+                            showDebuffOverwriteWindow = true
+                            debuffOverrideIndex = abil.priority
+                        end
+                    end
+                })
+
+            ImGui.Columns(1) -- Reset columns to single column layout
+
+            ImGui.End()
+        end
+    end
+end
+
+local function DrawBuffEditorWindow()
+    local flags = bit32.bor(ImGuiWindowFlags.NoSavedSettings)
+    if isEditingBuff then
+        isEditingBuff, shouldDrawBuffEditor = ImGui.Begin(dynamicBuffWindowTitle, isEditingBuff, flags)
+        if shouldDrawBuffEditor then
+            ImGui.SetWindowSize(600, 250, ImGuiCond.FirstUseEver) -- Adjust window size as needed
+
+            -- Access the Buff ability being edited
+            local abil = state.config.buffabils[state.class][editIndex]
+            local dropdownOptions = {"AA", "Spell", "Item", "Skill", "Disc", "Cmd"} -- Dropdown options
+
+            ImGui.Columns(2, "BuffColumns", false) -- Split into 2 columns
+
+            -- First table
+            DrawTable("BuffEditWin", 7, 2, {"##1", "##2"}, 100, 200, nil,
+                {
+                    -- Column 1 Labels
+                    function()
+                        ImGui.Text("Name:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup1")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup1", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput1", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.name or ""
+                                abil.name, _ = ImGui.InputTextMultiline("##InputText1", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    function()
+                        ImGui.Text("Buff Name:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup2")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup2", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput2", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.buffname or ""
+                                abil.buffname, _ = ImGui.InputTextMultiline("##InputText2", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    "Type:",
+                    function()
+                        ImGui.Text("Cond:")
+                        ImGui.SameLine()
+                        if ImGui.Button(icons.FA_EXPAND .. "##1", ImVec2(20, 20)) then
+                            ImGui.OpenPopup("FullTextPopup")
+                        end
+
+                        ImGui.SetNextWindowSize(1000, 600)
+                        ImGui.PushStyleColor(ImGuiCol.PopupBg, ImVec4(0, 0, 0, 1.0))
+                        if ImGui.BeginPopup("FullTextPopup", bit32.bor(ImGuiWindowFlags.AlwaysAutoResize, ImGuiWindowFlags.AlwaysHorizontalScrollbar)) then
+                            if ImGui.BeginChild("FullTextInput", 1000, 600) then
+                                -- InputTextMultiline inside child window
+                                local buffer = abil.cond or ""
+                                abil.cond, _ = ImGui.InputTextMultiline("##InputText", buffer, 1000, 600)
+                                ImGui.EndChild()
+                            end
+                            ImGui.EndPopup()
+                        end
+                        ImGui.PopStyleColor()
+                    end,
+                    "Active:",
+                    function() DrawInfoIconWithTooltip("Other targets outside of the default options that we will check for this buff.") end,
+                    function() DrawInfoIconWithTooltip("Targets that have any of the buffs in the override list will be skipped for this buff ability.") end
+                },
+                {
+                    -- Column 2 Inputs
+                    function() abil.name = DrawTextInput(abil.name, "##Name", 165) end,
+                    function() abil.buffname = DrawTextInput(abil.buffname, "##BuffName", 165) end,
+                    function() abil.type = DrawDropdown(abil.type, "##type", dropdownOptions, 165) end,
+                    function() abil.cond = DrawTextInput(abil.cond, "##Condition", 165) end,
+                    function() abil.active = ImGui.Checkbox("##Active", abil.active) end,
+                    function()  
+                        if ImGui.Button("Open Buff Targets",165,20) then
+                            showBuffTargetWindow = true
+                            buffTargetIndex = abil.priority
+                        end
+                    end,
+                    function()  
+                        if ImGui.Button("Open Buff Overrides",165,20) then
+                            showBuffOverrideWindow = true
+                            buffOverrideIndex = abil.priority
+                        end
+                    end
+                })
+
+
+            ImGui.NextColumn() -- Move to the next column
+
+            -- Second table (Add any additional fields if needed)
+            -- For example, you might have settings like 'Max Targets' or 'Buff Mode'
+
+            -- Example:
+            DrawTable("BuffEditWin2", 7, 2, {"##3", "##4"}, 120, 200, nil,
+                {
+                    "Priority:",
+                    "Loop Delay:",
+                    "Ability CD:",
+                    "Use Group Tank:",
+                    "Use Group:",
+                    "Use Self:",
+                    "Use Pets:"
+                },
+                {
+                    function() abil.priority = DrawNumberInput(abil.priority or 1, "##priority") end,
+                    function() abil.loopdel = DrawNumberInput(abil.loopdel or 0, "##loopdel") end,
+                    function() abil.abilcd = DrawNumberInput(abil.abilcd or 10, "##abilcd") end,
+                    function() abil.usegrouptank = DrawCheckbox(abil.usegrouptank,"##usegrouptank") end,
+                    function() abil.usegroup = DrawCheckbox(abil.usegroup,"##usegroup") end,
+                    function() abil.useself = DrawCheckbox(abil.useself,"##useself") end,
+                    function() abil.usepets = DrawCheckbox(abil.usepets,"##usepets") end
+
+                })
+
+            ImGui.Columns(1) -- Reset columns to single column layout
+
+            ImGui.End()
+        end
+    end
+end
+
+
 local function DrawHealEditorWindow()
     local flags = bit32.bor(ImGuiWindowFlags.NoSavedSettings)
     if isEditingHeal then
@@ -921,14 +1281,16 @@ local function DrawHealEditorWindow()
 
             local abil = state.config.healabils[state.class][editIndex]
             local dropdownOptions = {"AA", "Spell", "Item", "Skill", "Disc", "Cmd"} -- Dropdown options
-            local cureOptions = {"Poison", "Disease", "Curse", "Corruption", "Detrimental"} -- Cure type options
+            local cureOptions = {
+                "Poison", "Disease", "Curse", "Corruption", "Detrimental"
+            }-- Cure type options
 
             ImGui.Columns(2, "HealColumns", false) -- Split into 2 columns
 
             -- First table
             DrawTable("HealEditWin", 10, 2, {"##1", "##2"}, 150, 110, nil,
                 {
-                        function()
+                    function()
                         ImGui.Text("Name:")
                         ImGui.SameLine()
                         if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
@@ -987,7 +1349,31 @@ local function DrawHealEditorWindow()
                     function() abil.name = DrawTextInput(abil.name, "##Name", 200) end,
                     function() abil.type = DrawDropdown(abil.type, "##type", dropdownOptions, 200) end,
                     function() abil.cond = DrawTextInput(abil.cond, "##Condition", 200) end,
-                    function() if abil.cure then abil.curetype = DrawDropdown(abil.curetype, "##CureType", cureOptions, 110) end end,
+                    function()
+                        if abil.cure then
+                            if type(abil.curetype) ~= "table" then abil.curetype = {} end
+                            local selectionLabels = {"Poison", "Disease", "Corruption", "Curse", "Detrimental"}
+                            
+                            for _, label in ipairs(selectionLabels) do
+                                -- Check if the label is currently selected
+                                local isSelected = contains(abil.curetype, label)
+                                
+                                -- Display the selectable item
+                                local _, isClicked = ImGui.Selectable(label, isSelected)
+                                if isSelected and isClicked then
+                                    -- If it was selected and clicked, deselect it
+                                    for i, v in ipairs(abil.curetype) do
+                                        if v == label then
+                                            table.remove(abil.curetype, i)
+                                            break
+                                        end
+                                    end
+                                elseif isClicked then
+                                    table.insert(abil.curetype, label)
+                                end
+                            end
+                        end
+                    end,
                     function() abil.cure = ImGui.Checkbox("##Cure", abil.cure) end,
                     function() abil.rez = ImGui.Checkbox("##Rez", abil.rez) end,
                     function() abil.active = ImGui.Checkbox("##Active", abil.active) end,
@@ -999,22 +1385,27 @@ local function DrawHealEditorWindow()
             ImGui.NextColumn() -- Move to the next column
 
             -- Second table
-            DrawTable("HealEditWin2", 9, 2, {"##3", "##4"}, 150, 120, nil,
+            DrawTable("HealEditWin2", 10, 2, {"##3", "##4"}, 150, 120, nil,
                 {
                     "Retry CD:",
                     "Loop Delay:",
                     "Priority:",
+                    function()
+                        ImGui.Text("Override Heal Pct:")
+                        DrawInfoIconWithTooltip("Ability will not activate on targets greater than this HP %. If the heal config setting 'Heal At' (different Emergency settings if emergency ability, 'HoT At' if hot) is lower than this number, than that setting will take precedent.")
+                    end,
                     "Use XTar:",
                     "Use Group Tank:",
                     "Use Group Members:",
                     "Use Other Tanks:",
                     "Use Self:",
-                    "Use Pets:",
+                    "Use Pets:"
                 },
                 {
                     function() abil.abilcd = DrawNumberInput(abil.abilcd, "##abilcd") end,
                     function() abil.loopdel = DrawNumberInput(abil.loopdel, "##loopdel") end,
                     function() abil.priority = DrawNumberInput(abil.priority, "##priority") end,
+                    function() abil.healpct = DrawNumberInput(abil.healpct, "##healpct") end,
                     function() abil.usextar = ImGui.Checkbox("##UseXtar", abil.usextar) end,
                     function() abil.usegrouptank = ImGui.Checkbox("##UseGroupTank", abil.usegrouptank) end,
                     function() abil.usegroupmember = ImGui.Checkbox("##UseGroupMember", abil.usegroupmember) end,
@@ -1125,6 +1516,108 @@ local function DrawHealList()
 
     ImGui.EndChild()
 end
+
+local function DrawDebuffList()
+    local function calculateTableHeight()
+        local totalHeight = (#state.config.debuffabils[state.class] * 27) + 20
+        if totalHeight < 317 then
+            return totalHeight
+        else
+            return 317
+        end
+    end
+
+    local tableHeight = calculateTableHeight()
+    ImGui.BeginChild("HealListBorder", ImVec2(0, tableHeight))
+
+    local totalWidth = ImGui.GetWindowWidth()
+    local checkboxWidth = totalWidth * 0.15
+    local nameWidth = totalWidth * 0.65
+    local editButtonWidth = totalWidth * 0.20
+
+    local activedata = {}
+    local buttondata = {}
+    local editdata = {}
+
+    for i = #state.config.debuffabils[state.class], 1, -1 do
+        local v = state.config.debuffabils[state.class][i]
+        if v.priority ~= i then v.priority = i end
+        if not v then
+            write.Error('Debuff ability at index', i, 'is nil')
+        else
+            table.insert(activedata, 1, function() v.active = DrawCheckbox(v.active, "##debuff" .. i) end)
+            table.insert(buttondata, 1, function() DrawDragDrop(v, state.config.debuffabils, nameWidth, i) end)
+            table.insert(editdata, 1, function() DrawEditDeleteDebuff(v, state.config.debuffabils) end)
+        end
+    end
+
+    DrawTable(
+        "DebuffListTable",
+        #state.config.debuffabils[state.class],
+        3,
+        {"Active", "Debuff Ability", "Edit / Delete"},
+        checkboxWidth,
+        nameWidth,
+        editButtonWidth,
+        activedata,
+        buttondata,
+        editdata
+    )
+
+    ImGui.EndChild()
+end
+
+local function DrawBuffList()
+    local function calculateTableHeight()
+        local totalHeight = (#state.config.buffabils[state.class] * 27) + 20
+        if totalHeight < 452 then
+            return totalHeight
+        else
+            return 452
+        end
+    end
+
+    local tableHeight = calculateTableHeight()
+    ImGui.BeginChild("BuffListBorder", ImVec2(0, tableHeight))
+
+    local totalWidth = ImGui.GetWindowWidth()
+    local checkboxWidth = totalWidth * 0.15
+    local nameWidth = totalWidth * 0.65
+    local editButtonWidth = totalWidth * 0.20
+
+    local activedata = {}
+    local buttondata = {}
+    local editdata = {}
+
+    for i = #state.config.buffabils[state.class], 1, -1 do
+        local v = state.config.buffabils[state.class][i]
+        if v.priority ~= i then v.priority = i end
+        if not v then
+            write.Error('buff ability at index', i, 'is nil')
+        else
+            table.insert(activedata, 1, function() v.active = DrawCheckbox(v.active, "##buff" .. i) end)
+            table.insert(buttondata, 1, function() DrawDragDrop(v, state.config.buffabils, nameWidth, i) end)
+            table.insert(editdata, 1, function() DrawEditDeleteBuff(v, state.config.buffabils) end)
+        end
+    end
+
+    DrawTable(
+        "BuffListTable",
+        #state.config.buffabils[state.class],
+        3,
+        {"Active", "Buff Ability", "Edit / Delete"},
+        checkboxWidth,
+        nameWidth,
+        editButtonWidth,
+        activedata,
+        buttondata,
+        editdata
+    )
+
+    ImGui.EndChild()
+end
+
+
 
 
 local function DrawList()
@@ -1685,6 +2178,32 @@ local function DrawConsoleTab()
         ImGui.SameLine()
         ImGui.Text(tostring(mq.TLO.Target.CleanName()))
 
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),string.format("Memory Usage:"))
+        ImGui.SameLine()
+        ImGui.Text("%.2f MB", collectgarbage("count") / 1024)
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'# in Buff Queue:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(#state.buffqueue))
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2) 
+        ImGui.PushStyleColor(ImGuiCol.Text,ImVec4(1,0,0,1))
+        if ImGui.Button('Clear',ImVec2(40,20)) then
+            state.buffqueue = {}
+        end
+        ImGui.PopStyleColor()
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'# in Cure Queue:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(#state.curequeue))
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2) 
+        ImGui.PushStyleColor(ImGuiCol.Text,ImVec4(1,0,0,1))
+        if ImGui.Button('Clear1',ImVec2(40,20)) then
+            state.curequeue = {}
+        end
+        ImGui.PopStyleColor()
+
         ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Role:')
         ImGui.SameLine()
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2) 
@@ -1860,6 +2379,8 @@ local function DrawGenTab()
         state.config.doMedding = DrawCheckbox(state.config.doMedding, "Medding Enabled")
         state.config.combatMed = DrawCheckbox(state.config.combatMed, "Med in Combat")
         state.config.useMQ2Melee = DrawCheckbox(state.config.useMQ2Melee, "Use MQ2Melee")
+        state.config.memSpellSetAtStart = DrawCheckbox(state.config.memSpellSetAtStart, "Mem Spell Set At Start")
+        state.config.spellSetName = DrawTextInput(state.config.spellSetName, "Spell Set Name", 100)
         ImGui.NewLine()
         ImGui.Text('Assist Type:')
         local asstypes = { "Group MA", "Raid MA", "Custom Name", "Custom ID"}
@@ -2159,9 +2680,17 @@ function DrawCureAvoidsTable()
 end
 
 local newOtherTank = ""  -- Temporary variable for input for otherTankList
-local newHotTarget = ""  -- Temporary variable for input for hotTargets
+local newHotTarget = "" 
+local newOverrideTarget = ""
+local newBuffTarget = ""
+local newBuffOverride = ""
+
+
+local showAddOverridePopup = false 
 local showAddOtherTankPopup = false  -- Track whether the popup for otherTankList is active
-local showAddHotTargetPopup = false  -- Track whether the popup for hotTargets is active
+local showAddHotTargetPopup = false
+local showAddBuffTargetPopup = false
+local showAddBuffOverridePopup = false  -- Track whether the popup for hotTargets is active
 
 function DrawOtherTankListTable()
     -- Begin table
@@ -2212,6 +2741,214 @@ function DrawOtherTankListTable()
             if ImGui.Button("Cancel") then
                 newOtherTank = ""  -- Clear the input
                 showAddOtherTankPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
+
+
+
+function DrawDebuffOverwriteWindow(abilindex)
+    if showDebuffOverwriteWindow then
+        showDebuffOverwriteWindow = ImGui.Begin("Debuff Overwrite Table", showDebuffOverwriteWindow, ImGuiWindowFlags.None)
+        if showDebuffOverwriteWindow then
+            ImGui.SetWindowSize(600, 350, ImGuiCond.FirstUseEver)
+            DrawDebuffOverwriteTable(abilindex)
+        end
+        ImGui.End()
+    end
+end
+
+function DrawBuffTargetWindow(abilindex)
+    if showBuffTargetWindow then
+        showBuffTargetWindow = ImGui.Begin("Buff Target Table", showBuffTargetWindow, ImGuiWindowFlags.None)
+        if showBuffTargetWindow then
+            ImGui.SetWindowSize(600, 350, ImGuiCond.FirstUseEver)
+            DrawBuffTargetTable(abilindex)
+        end
+        ImGui.End()
+    end
+end
+
+function DrawBuffOverrideWindow(abilindex)
+    if showBuffOverrideWindow then
+        showBuffOverrideWindow = ImGui.Begin("Buff Override Table", showBuffOverrideWindow, ImGuiWindowFlags.None)
+        if showBuffOverrideWindow then
+            ImGui.SetWindowSize(600, 350, ImGuiCond.FirstUseEver)
+            DrawBuffOverrideTable(abilindex)
+        end
+        ImGui.End()
+    end
+end
+
+function DrawBuffTargetTable(abilindex)
+    -- Begin table
+    if ImGui.BeginTable("Buff Targets:", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        ImGui.TableSetupColumn("Targets")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, target in ipairs(state.config.buffabils[state.class][abilindex].othertargets) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(target)  -- Display the entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##buffTargets" .. index) then
+                table.remove(state.config.buffabils[state.class][abilindex].othertargets, index)  -- Remove entry
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add Target") then
+        showAddBuffTargetPopup = true
+    end
+
+    -- Draw popup for adding new Buff targets
+    if showAddBuffTargetPopup then
+        ImGui.OpenPopup("Add Target")
+        if ImGui.BeginPopupModal("Add Target", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new Target:")
+            newBuffTarget = ImGui.InputText("##newBuffTarget", newBuffTarget)
+
+            if ImGui.Button("Add") then
+                if newBuffTarget ~= "" then
+                    table.insert(state.config.buffabils[state.class][abilindex].othertargets, newBuffTarget)
+                end
+                newBuffTarget = ""  -- Clear the input
+                showAddBuffTargetPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newBuffTarget = ""  -- Clear the input
+                showAddBuffTargetPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
+function DrawBuffOverrideTable(abilindex)
+    -- Begin table
+    if ImGui.BeginTable("Buff Overrides:", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        ImGui.TableSetupColumn("Overrides")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, override in ipairs(state.config.buffabils[state.class][abilindex].overrides) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(override)  -- Display the entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##buffOverrides" .. index) then
+                table.remove(state.config.buffabils[state.class][abilindex].overrides, index)  -- Remove entry
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add Override") then
+        showAddBuffOverridePopup = true
+    end
+
+    -- Draw popup for adding new Buff overrides
+    if showAddBuffOverridePopup then
+        ImGui.OpenPopup("Add Override")
+        if ImGui.BeginPopupModal("Add Override", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new Override:")
+            newBuffOverride = ImGui.InputText("##newBuffOverride", newBuffOverride)
+
+            if ImGui.Button("Add") then
+                if newBuffOverride ~= "" then
+                    table.insert(state.config.buffabils[state.class][abilindex].overrides, newBuffOverride)
+                end
+                newBuffOverride = ""  -- Clear the input
+                showAddBuffOverridePopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newBuffTarget = ""  -- Clear the input
+                showAddBuffTargetPopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.EndPopup()
+        end
+    end
+end
+
+function DrawDebuffOverwriteTable(abilindex)
+    -- Begin table
+    if ImGui.BeginTable("Overwrite Overrides:", 2, ImGuiTableFlags.Borders) then
+        -- Table headers
+        DrawInfoIconWithTooltip("Overwrite Overrides is a list of debuffs that this ability will not attempt to overwrite")
+        ImGui.TableSetupColumn("Overrides")
+        ImGui.TableSetupColumn("Delete")
+        ImGui.TableHeadersRow()
+
+        -- Populate rows
+        for index, override in ipairs(state.config.debuffabils[state.class][abilindex].overrides) do
+            ImGui.TableNextRow()
+            ImGui.TableNextColumn()
+            ImGui.Text(override)  -- Display the entry
+
+            ImGui.TableNextColumn()
+            if ImGui.Button("Delete##debuffOverrides" .. index) then
+                table.remove(state.config.debuffabils[state.class][abilindex].overrides, index)  -- Remove entry
+            end
+        end
+
+        ImGui.EndTable()
+    end
+
+    -- Button to show the add popup
+    if ImGui.Button("Add Override") then
+        showAddOverridePopup = true
+    end
+
+    -- Draw popup for adding new Override targets
+    if showAddOverridePopup then
+        ImGui.OpenPopup("Add Override")
+        if ImGui.BeginPopupModal("Add Override", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+            ImGui.Text("Enter a new Override:")
+            newOverrideTarget = ImGui.InputText("##newOverrideTarget", newOverrideTarget)
+
+            if ImGui.Button("Add") then
+                if newOverrideTarget ~= "" then
+                    table.insert(state.config.debuffabils[state.class][abilindex].overrides, newOverrideTarget)
+                end
+                newOverrideTarget = ""  -- Clear the input
+                showAddOverridePopup = false  -- Close popup
+                ImGui.CloseCurrentPopup()
+            end
+
+            ImGui.SameLine()
+
+            if ImGui.Button("Cancel") then
+                newOverrideTarget = ""  -- Clear the input
+                showAddOverridePopup = false  -- Close popup
                 ImGui.CloseCurrentPopup()
             end
 
@@ -2361,7 +3098,7 @@ local function DrawHealTab()
 
         ImGui.NewLine()
 
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 100)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 80)
         anim:SetTextureCell(99)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
         ImGui.DrawTextureAnimation(anim,45,45)
@@ -2410,9 +3147,43 @@ local function DrawBuffsTab()
     if ImGui.BeginTabItem(icons.FA_BOOK .. "   Buffs") then
         local totalWidth, _ = ImGui.GetContentRegionAvail()
         local columnWidth = totalWidth / 2
-    
         ImGui.Columns(2)
+        state.config.doBuffs = DrawCheckbox(state.config.doBuffs,"Do Buffs")
+        ImGui.NextColumn()
+        state.config.buffCheckInterval = DrawNumberInput(state.config.buffCheckInterval,"Buff Check Interval",{0,math.huge})
+
         ImGui.Columns(1)
+
+        DrawBuffList()
+        DrawBuffEditorWindow()
+
+        ImGui.NewLine()
+
+        if ImGui.Button("Add Buff", 100, 55) then
+            local newTemplate = abils.buffAbilTemplate
+            local newAbility = deepcopy(newTemplate)
+            newAbility.priority = #state.config.buffabils[state.class] + 1
+            table.insert(state.config.buffabils[state.class], newAbility)
+        end
+        ImGui.SameLine()
+    
+        state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+    
+        if state.copyMode then
+            ImGui.SameLine()
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+            local alpha = 0.5 * (1 + math.sin((frameCounter % flashInterval) / flashInterval * (2 * math.pi)))
+            ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+        end
+    
+        ImGui.SameLine()
+        if state.copyMode then
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
+        else
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
+        end
+        ImGui.NewLine()
         DrawTabEnd()
         ImGui.EndTabItem()
     end
@@ -2424,7 +3195,88 @@ local function DrawDebuffsTab()
         local columnWidth = totalWidth / 2
     
         ImGui.Columns(2)
+
+        state.config.doDebuffs = DrawCheckbox(state.config.doDebuffs,"Do Debuffs")
+        state.config.doCharm = DrawCheckbox(state.config.doCharm,"Do Charm")
+        state.config.debuffMode = DrawDropdown(state.config.debuffMode,"Debuff Mode",{"Cycle Targets", "Cycle Debuffs"},150)
+        state.config.charmSpell = DrawTextInput(state.config.charmSpell,"Charm Abil",150)
+        state.config.charmType = DrawDropdown(state.config.charmType,"Charm Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
+        state.config.charmBreakSpell = DrawTextInput(state.config.charmBreakSpell,"Charm Break Abil",150)
+        ImGui.SameLine()
+        DrawInfoIconWithTooltip("This is the ability that will activate immediately on a charm break. Default target is your charm pet.")
+        state.config.charmBreakType = DrawDropdown(state.config.charmBreakType,"Charm Break Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
+
+        ImGui.NextColumn()
+
+        state.config.maxDebuffRange = DrawNumberInput(state.config.maxDebuffRange,"Max Debuff Range",{0,math.huge})
+        state.config.debuffStartAt = DrawNumberInput(state.config.debuffStartAt,"Debuff Start At",{0,100})
+        state.config.debuffStopAt = DrawNumberInput(state.config.debuffStopAt,"Debuff Stop At",{0,100})
+        state.config.debuffZRadius = DrawNumberInput(state.config.debuffZRadius,"Debuff Z Radius",{0,math.huge})
+        state.config.debuffAETargetMin = DrawNumberInput(state.config.debuffAETargetMin,"AE Target Min",{0,math.huge})
+        if ImGui.Button("Set Pet",55,20) then
+            state.currentpet = mq.TLO.Target.ID()
+        end
+        ImGui.SameLine()
+        ImGui.Text(string.format("Current Pet: %s",mq.TLO.Spawn(state.currentpet).CleanName()))
+
         ImGui.Columns(1)
+
+        anim:SetTextureCell(17)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,90,90)
+        ImGui.SameLine()
+
+        anim:SetTextureCell(55)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,90,90)
+        ImGui.SameLine()
+
+        anim:SetTextureCell(5)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim,90,90)
+        ImGui.SameLine()
+
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 10)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 25)
+
+        ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
+        ImGui.SetWindowFontScale(5)
+        ImGui.Text('Debuffs')
+        ImGui.PopStyleColor()
+        ImGui.SetWindowFontScale(1)
+
+
+
+        DrawDebuffList()
+        DrawDebuffEditorWindow()
+
+        ImGui.NewLine()
+
+        if ImGui.Button("Add Debuff", 100, 55) then
+            local newTemplate = abils.debuffAbilTemplate
+            local newAbility = deepcopy(newTemplate)
+            newAbility.priority = #state.config.debuffabils[state.class] + 1
+            table.insert(state.config.debuffabils[state.class], newAbility)
+        end
+        ImGui.SameLine()
+    
+        state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+    
+        if state.copyMode then
+            ImGui.SameLine()
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+            local alpha = 0.5 * (1 + math.sin((frameCounter % flashInterval) / flashInterval * (2 * math.pi)))
+            ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+        end
+    
+        ImGui.SameLine()
+        if state.copyMode then
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
+        else
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
+        end
+        ImGui.NewLine()
         DrawTabEnd()
         ImGui.EndTabItem()
     end
@@ -2693,17 +3545,161 @@ local function DrawTankTab()
     end
 end
 
+local newKeywordBuffer = ""
+
 local function DrawEventsTab()
     if ImGui.BeginTabItem(icons.FA_FILE_TEXT_O.. "   Events") then
         local totalWidth, _ = ImGui.GetContentRegionAvail()
-        local columnWidth = totalWidth / 2
-    
-        ImGui.Columns(2)
-        ImGui.Columns(1)
+
+        if ImGui.CollapsingHeader("Keywords   "..icons.FA_BOOK, ImGuiTreeNodeFlags.DefaultOpen) then
+            -- Build combined ability list
+            local allAbilities = {}
+            local buffAbilities = state.config.buffabils[state.class] or {}
+            local healAbilities = state.config.healabils[state.class] or {}
+            
+            for _, abil in ipairs(buffAbilities) do
+                table.insert(allAbilities, {name=abil.name, cure=false})
+            end
+            for _, abil in ipairs(healAbilities) do
+                if abil.cure then
+                    table.insert(allAbilities, {name=abil.name, cure=true})
+                end
+            end
+
+            -- Convert keywords to a list
+            local keywordList = {}
+            for k, v in pairs(state.config.keywords) do
+                table.insert(keywordList, {keyword=k, data=v})
+            end
+            table.sort(keywordList, function(a,b) return a.keyword < b.keyword end)
+
+            local rows = #keywordList
+            local columns = 3
+            local columnLabels = {"Keyword","Abilities","Delete"}
+
+            local rowHeight = 27
+            local tableHeight = (rows * rowHeight) + 20
+
+            if ImGui.BeginTable("KeywordTable", columns, table_flags, ImVec2(0, tableHeight)) then
+                ImGui.TableSetupColumn(columnLabels[1])
+                ImGui.TableSetupColumn(columnLabels[2])
+                ImGui.TableSetupColumn(columnLabels[3])
+                ImGui.TableHeadersRow()
+
+                local alternatingColor = true
+                for i, entry in ipairs(keywordList) do
+                    local keyword = entry.keyword
+                    local kdata = entry.data
+                    local buffs = kdata.buffs or {}
+                    local cures = kdata.cures or {}
+
+                    ImGui.TableNextRow(0,rowHeight)
+
+                    -- Column 1: Keyword name
+                    ImGui.TableSetColumnIndex(0)
+                    ImGui.Text(keyword)
+
+                    -- Column 2: Multi-select combo for abilities using Selectable and icons.FA_CHECK for selected state
+                    ImGui.TableSetColumnIndex(1)
+                    ImGui.PushID("keyword_abils_"..i)
+                    ImGui.SetNextItemWidth(200)
+                    if ImGui.BeginCombo("##abilities", "Select Abilities", ImGuiComboFlags.HeightLarge) then
+                        for _, ability in ipairs(allAbilities) do
+                            local isSelected = false
+                            if ability.cure then
+                                for _, c in ipairs(cures) do
+                                    if c:lower() == ability.name:lower() then
+                                        isSelected = true
+                                        break
+                                    end
+                                end
+                            else
+                                for _, b in ipairs(buffs) do
+                                    if b:lower() == ability.name:lower() then
+                                        isSelected = true
+                                        break
+                                    end
+                                end
+                            end
+
+                            -- Prefix ability name with a check icon if selected
+                            local displayName = (isSelected and (icons.FA_CHECK.." "..ability.name) or ability.name)
+
+                            local newSelected, pressed = ImGui.Selectable(displayName, false, ImGuiSelectableFlags.DontClosePopups)
+                            if pressed then
+                                -- Toggle logic
+                                if isSelected then
+                                    -- Was selected, remove it
+                                    if ability.cure then
+                                        for idx, c in ipairs(cures) do
+                                            if c:lower() == ability.name:lower() then
+                                                table.remove(cures, idx)
+                                                break
+                                            end
+                                        end
+                                    else
+                                        for idx, b in ipairs(buffs) do
+                                            if b:lower() == ability.name:lower() then
+                                                table.remove(buffs, idx)
+                                                break
+                                            end
+                                        end
+                                    end
+                                else
+                                    -- Was not selected, add it
+                                    if ability.cure then
+                                        table.insert(cures, ability.name)
+                                    else
+                                        table.insert(buffs, ability.name)
+                                    end
+                                end
+                                -- Update original tables
+                                kdata.buffs = buffs
+                                kdata.cures = cures
+                            end
+                        end
+                        ImGui.EndCombo()
+                    end
+                    ImGui.PopID()
+
+                    ImGui.TableSetColumnIndex(2)
+                    ImGui.PushID("keyword_del_"..i)
+                    if ImGui.Button("Delete") then
+                        state.config.keywords[keyword] = nil
+                    end
+                    ImGui.PopID()
+
+                end
+                ImGui.EndTable()
+            end
+
+            -- Add new keyword section
+            ImGui.NewLine()
+            ImGui.Text("Add New Keyword:")
+            ImGui.SetNextItemWidth(400)
+            ImGui.SameLine()
+            newKeywordBuffer = newKeywordBuffer or ""
+            local newValue, changed = ImGui.InputText("##NewKeyword", newKeywordBuffer)
+            if changed then
+                newKeywordBuffer = newValue
+            end
+            ImGui.SameLine()
+            if ImGui.Button("Add Keyword") then
+                local nk = newKeywordBuffer:lower():match("%S+")
+                if nk and nk ~= "" and not state.config.keywords[nk] then
+                    state.config.keywords[nk] = {buffs={}, cures={}}
+                    newKeywordBuffer = ""
+                end
+            end
+        end
+
         DrawTabEnd()
         ImGui.EndTabItem()
     end
 end
+
+
+
 
 function mod.parseImVec4(str)
     local values = {}
@@ -2750,6 +3746,9 @@ function mod.main()
             DrawEventsTab()
             ImGui.EndTabBar()
         end
+        DrawDebuffOverwriteWindow(debuffOverrideIndex)
+        DrawBuffOverrideWindow(buffOverrideIndex)
+        DrawBuffTargetWindow(buffTargetIndex)
     end
 
     if showTableGUI then

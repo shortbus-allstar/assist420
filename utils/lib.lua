@@ -129,7 +129,7 @@ function mod.zipIgnores()
 end
 
 function mod.getAssistTarget()
-    local spawntbl = {}
+    local spawntbl = nil
     if state.config.assistType == 'Group MA' then
         state.maname = mq.TLO.Group.MainAssist.Name()
         return mq.TLO.Me.GroupAssistTarget
@@ -180,6 +180,26 @@ function mod.initToon(toon)
     mq.delay(20)
 end
 
+function mod.findBuffAbility(buffName)
+    local buffAbilities = state.config.buffabils[state.class] or {}
+    for i, abil in ipairs(buffAbilities) do
+        if abil.name:lower() == buffName:lower() then
+            return i
+        end
+    end
+    return nil
+end
+
+function mod.findCureAbility(cureName)
+    local healAbilities = state.config.healabils[state.class] or {}
+    for i, abil in ipairs(healAbilities) do
+        if abil.cure and abil.name:lower() == cureName:lower() then
+            return i
+        end
+    end
+    return nil
+end
+
 function mod.initObservers()
     for i = 1, mq.TLO.Me.GroupSize() - 1 do
         mod.initToon(mq.TLO.Group.Member(i))
@@ -201,13 +221,11 @@ function mod.initAssistObserver(mainassist)
             local dis = mq.TLO.Target.Distance3D()
             tbl.hpval = curhp
             state.maname = mainassist
-            print(maxrngto)
             function tbl.PctHPs() return curhp end
             function tbl.Aggressive() return agg end
             function tbl.MaxRangeTo() return maxrngto end
             function tbl.ID() return id end
             function tbl.Distance3D() return dis end
-            print(tbl.MaxRangeTo())
             state.outAssistTarTimer = mq.gettime()
             return tbl
         end
@@ -243,6 +261,18 @@ function mod.initAssistObserver(mainassist)
         return tonumber(mq.TLO.DanNet(mainassist).O('Target.Distance3D')())
     end
     return tbl
+end
+
+function mod.checkCharm()
+    if state.currentpet ~= nil and state.currentpet ~= 0 then
+        local pet = mq.TLO.Spawn(state.currentpet)
+        if pet then
+            if not pet.Dead() and (pet.Distance3D() or 500) < 200 and mq.TLO.Pet.ID() == 0 then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 

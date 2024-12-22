@@ -10,16 +10,18 @@ PackageMan.Require('luafilesystem','lfs')
 
 local write = require('utils.Write')
 local state = require('utils.state')
-local events = require('utils.events')
-local binds = require('utils.binds')
 local lib = require('utils.lib')
 
+local events = require('routines.events')
 local combat = require('routines.combat')
 local navigation = require('routines.navigation')
 local abils = require('routines.abils')
 local heals = require('routines.heal')
+local debuffs = require('routines.debuff')
+local buffs = require('routines.buff')
 local med   = require('routines.med')
 local tank = require('routines.tank')
+local binds = require('interface.binds')
 local ui = require('interface.GUI.gui')
 
 local reqplugins = {
@@ -81,6 +83,13 @@ local function doSetup()
     events.init()
     abils.initQueues(state.config.abilities[state.class])
     state.pullIgnores = lib.unZipIgnores()
+    if state.config.memSpellSetAtStart == true then
+        mq.cmdf('/memspellset %s',state.config.spellSetName)
+        mq.delay(100)
+        repeat
+            mq.delay(10)
+        until mq.TLO.Window('SpellBookWnd')() == "FALSE"
+    end
 end
 
 local function doNextAbility(delay)
@@ -107,12 +116,51 @@ local function doNextAbility(delay)
         end
 
         if routine == 'heals' then
-            for _, v in pairs(state.config.healabils[state.class]) do
+            local prevabildelay = nil
+            prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
+
+            if prevabildelay == 0 then
+                for _, v in pairs(state.config.healabils[state.class]) do
+                    if v then
+                        local abiltable, _ = heals.processHeal(v,ability.cure,ability.rez,ability.hot)
+                        if abiltable then
+                            prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
+                            if prevabildelay ~= 0 then return end
+                        end
+                    end
+                end
+            end
+        end
+
+        if routine == 'charm' or routine == 'charmBreak' then
+            local abiltable, _ = abils.processCharm(ability)
+            if abiltable then
+                abils.activateCharm(ability)
+            end
+        end
+
+        if routine == 'buffs' then
+            local prevabildelay = buffs.activateBuff(ability)
+            if prevabildelay ~= 0 then return end
+            for _, v in pairs(state.config.buffabils[state.class]) do
                 if v then
-                    local abiltable, _ = heals.processHeal(v,ability.cure,ability.rez,ability.hot)
+                    local abiltable, _ = buffs.processBuff(v)
                     if abiltable then
-                        write.Warn('%s',abiltable.name)
-                        local prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
+                        prevabildelay = buffs.activateBuff(abiltable)
+                        if prevabildelay ~= 0 then return end
+                    end
+                end
+            end
+        end
+
+        if routine == 'debuffs' then
+            local prevabildelay = debuffs.activateDebuff(ability)
+            if prevabildelay ~= 0 then return end
+            for _, v in pairs(state.config.debuffabils[state.class]) do
+                if v then
+                    local abiltable, _ = debuffs.processDebuff(v)
+                    if abiltable then
+                        local prevabildelay = debuffs.activateDebuff(abiltable)
                         if prevabildelay ~= 0 then return end
                     end
                 end
