@@ -1,6 +1,7 @@
 local mq = require('mq')
 local PackageMan = require('mq/PackageMan')
 
+
 StartTime = mq.gettime()
 
 PackageMan.Require('lua-cjson','cjson')
@@ -22,6 +23,7 @@ local buffs = require('routines.buff')
 local med   = require('routines.med')
 local tank = require('routines.tank')
 local binds = require('interface.binds')
+local tlo = require('interface.tlo')
 local ui = require('interface.GUI.gui')
 
 local reqplugins = {
@@ -68,17 +70,41 @@ local function doSetup()
     mq.cmd('/squelch /assist off')
     
     mq.bind('/state',binds.var)
+    mq.bind('/backoff',binds.backoff)
     mq.bind('/pull',binds.pullCmd)
     mq.bind('/config',binds.configcmd)
     mq.bind(string.format('/%s',state.class),binds.bindcallback)
     mq.bind('/420off',function() mq.cmd('/lua stop assist420') end)
+    mq.bind('/queue', function(abilityName, ...)
+        -- Combine remaining arguments into the target string
+        local target = table.concat({...}, " ")
+    
+        -- Validate inputs
+        if not abilityName or abilityName == "" or not target or target == "" then
+            write.Warn("Usage: /queue [ability name] [target]")
+            return
+        end
+    
+        -- Call the queueAbility function with the parsed arguments
+        abils.queueAbility(abilityName, target)
+    end)
 
+    mq.bind('/burn', function()
+        for _, v in ipairs(state.config.abilities[state.class]) do
+            if v.burn then
+                mq.cmdf('/queue "%s" "%s"',v.name,mq.TLO.Target.ID())
+            end
+        end
+    end)
+    
     mq.event("failfeign", '#1# has fallen to the ground.', function(_,arg1) 
         if arg1 == mq.TLO.Me.Name() then 
             write.Warn('Feign Failed, standing up...')
             mq.cmd('/stand')
         end 
     end)
+
+    mq.AddTopLevelObject('State', tlo.stateTLO)
     lib.initObservers()
     events.init()
     abils.initQueues(state.config.abilities[state.class])
@@ -95,6 +121,43 @@ end
 local function doNextAbility(delay)
     local ability, routine = state.nextAbil[1], state.nextAbil[2]
     if ability and routine then
+
+        if routine == 'queue' then
+            -- First, process all instant-cast abilities
+            for i = #state.queuedabils, 1, -1 do
+                local abil = state.queuedabils[i]
+                local targetID = abil.tarid
+                local type = abil.type
+        
+                if abils.processQueueAbil(abil) and mq.TLO.Target.ID() == targetID then
+                    local isInstant = false
+        
+                    if type == "Cmd" or type == "Skill" then
+                        isInstant = true
+                    elseif type == "Spell" and mq.TLO.Me.Gem(mq.TLO.Spell(abil.name).RankName() or "")() and
+                           mq.TLO.Spell(mq.TLO.Spell(abil.name).RankName() or "").MyCastTime() == 0 then
+                        isInstant = true
+                    elseif type == "Disc" and mq.TLO.Spell(mq.TLO.Spell(abil.name).RankName() or "").MyCastTime() == 0 then
+                        isInstant = true
+                    elseif type == "AA" and mq.TLO.Me.AltAbility(abil.name).Spell.MyCastTime() == 0 then
+                        isInstant = true
+                    elseif type == "Item" and mq.TLO.FindItem(abil.name).CastTime() == 0 then
+                        isInstant = true
+                    end
+        
+                    if isInstant then
+                        abils.activateQueuedAbility(abil)
+                        table.remove(state.queuedabils, i) -- Remove processed instant ability
+                    end
+                end
+            end
+        
+            -- Then, process the main queued ability (if applicable)
+            if abils.processQueueAbil(ability) then
+                abils.activateQueuedAbility(ability)
+            end
+        end
+        
         if routine == 'conditions' then
             local prevabildelay = nil
             prevabildelay = abils.activateAbility(ability,delay)
@@ -116,20 +179,7 @@ local function doNextAbility(delay)
         end
 
         if routine == 'heals' then
-            local prevabildelay = nil
-            prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
-
-            if prevabildelay == 0 then
-                for _, v in pairs(state.config.healabils[state.class]) do
-                    if v then
-                        local abiltable, _ = heals.processHeal(v,ability.cure,ability.rez,ability.hot)
-                        if abiltable then
-                            prevabildelay = heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
-                            if prevabildelay ~= 0 then return end
-                        end
-                    end
-                end
-            end
+            heals.activateHeal(ability,delay,ability.cure,ability.rez,ability.hot)
         end
 
         if routine == 'charm' or routine == 'charmBreak' then
@@ -140,31 +190,11 @@ local function doNextAbility(delay)
         end
 
         if routine == 'buffs' then
-            local prevabildelay = buffs.activateBuff(ability)
-            if prevabildelay ~= 0 then return end
-            for _, v in pairs(state.config.buffabils[state.class]) do
-                if v then
-                    local abiltable, _ = buffs.processBuff(v)
-                    if abiltable then
-                        prevabildelay = buffs.activateBuff(abiltable)
-                        if prevabildelay ~= 0 then return end
-                    end
-                end
-            end
+            buffs.activateBuff(ability)
         end
 
         if routine == 'debuffs' then
-            local prevabildelay = debuffs.activateDebuff(ability)
-            if prevabildelay ~= 0 then return end
-            for _, v in pairs(state.config.debuffabils[state.class]) do
-                if v then
-                    local abiltable, _ = debuffs.processDebuff(v)
-                    if abiltable then
-                        local prevabildelay = debuffs.activateDebuff(abiltable)
-                        if prevabildelay ~= 0 then return end
-                    end
-                end
-            end
+            debuffs.activateDebuff(ability)
         end
     end
 end

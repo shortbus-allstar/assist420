@@ -1885,6 +1885,68 @@ local function displayTableGUI(inputTable, parentKey)
     ImGui.End()
 end
 
+local function DrawAbilityHistory()
+    local history = state.abilityhistory or {}
+    local maxRows = 5
+    local rowHeight = 20
+    local tableHeight = math.min(#history, maxRows) * rowHeight + 26
+
+    -- Main Table with Name and Target Only
+    ImGui.BeginChild("AbilityHistory", ImVec2(0, tableHeight))
+    if ImGui.BeginTable("AbilityHistoryTable", 2, ImGuiTableFlags.RowBg) then
+        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch)
+        ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthStretch)
+        ImGui.TableHeadersRow()
+
+        for i = 1, math.min(#history, maxRows) do
+            local entry = history[i]
+            ImGui.TableNextRow()
+            ImGui.TableSetColumnIndex(0)
+            ImGui.Text(entry.name)
+            ImGui.TableSetColumnIndex(1)
+            ImGui.Text(mq.TLO.Spawn(entry.target).CleanName() or "Unknown")
+        end
+
+        ImGui.EndTable()
+    end
+    ImGui.EndChild()
+
+    -- Expand Button
+
+    -- Expanded View Popup
+    if ImGui.BeginPopupModal("ExpandedAbilityHistory", nil, ImGuiWindowFlags.AlwaysAutoResize) then
+        ImGui.Text("Full Ability History")
+        ImGui.Separator()
+        ImGui.BeginChild("ExpandedHistory", ImVec2(600, 400))
+
+        -- Expanded Table with Name, Target, and Timestamp
+        if ImGui.BeginTable("ExpandedHistoryTable", 3, ImGuiTableFlags.RowBg) then
+            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch)
+            ImGui.TableSetupColumn("Target", ImGuiTableColumnFlags.WidthStretch)
+            ImGui.TableSetupColumn("Timestamp", ImGuiTableColumnFlags.WidthStretch)
+            ImGui.TableHeadersRow()
+
+            for _, entry in ipairs(history) do
+                ImGui.TableNextRow()
+                ImGui.TableSetColumnIndex(0)
+                ImGui.Text(entry.name)
+                ImGui.TableSetColumnIndex(1)
+                ImGui.Text(mq.TLO.Spawn(entry.target).CleanName() or "Unknown")
+                ImGui.TableSetColumnIndex(2)
+                ImGui.Text(lib.formatTimestamp(entry.timestamp))
+            end
+
+            ImGui.EndTable()
+        end
+
+        ImGui.EndChild()
+        if ImGui.Button("Close", ImVec2(100, 30)) then
+            ImGui.CloseCurrentPopup()
+        end
+        ImGui.EndPopup()
+    end
+end
+
 
 
 
@@ -1965,7 +2027,8 @@ local function DrawConsoleTab()
 
         if ImGui.Button(string.format('Update\n     ' .. icons.FA_DOWNLOAD), BUTTON_SIZE * 2, BUTTON_SIZE) then
 
-            local githubver = string.sub(state.githubver, 2)              local mqNextDir = mq.luaDir
+            local githubver = string.sub(state.githubver, 2)              
+            local mqNextDir = mq.luaDir
             local zipFilePath = mqNextDir .. "\\assist420.zip"
             
             -- Download the zip file
@@ -2182,6 +2245,17 @@ local function DrawConsoleTab()
         ImGui.SameLine()
         ImGui.Text("%.2f MB", collectgarbage("count") / 1024)
 
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'# in Abil Queue:')
+        ImGui.SameLine()
+        ImGui.Text(tostring(#state.queuedabils))
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2) 
+        ImGui.PushStyleColor(ImGuiCol.Text,ImVec4(1,0,0,1))
+        if ImGui.Button('Clear##2',ImVec2(40,20)) then
+            state.queuedabils = {}
+        end
+        ImGui.PopStyleColor()
+
         ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'# in Buff Queue:')
         ImGui.SameLine()
         ImGui.Text(tostring(#state.buffqueue))
@@ -2199,7 +2273,7 @@ local function DrawConsoleTab()
         ImGui.SameLine()
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 2) 
         ImGui.PushStyleColor(ImGuiCol.Text,ImVec4(1,0,0,1))
-        if ImGui.Button('Clear1',ImVec2(40,20)) then
+        if ImGui.Button('Clear##1',ImVec2(40,20)) then
             state.curequeue = {}
         end
         ImGui.PopStyleColor()
@@ -2281,6 +2355,14 @@ local function DrawConsoleTab()
             
             ImGui.EndCombo()
         end
+
+        ImGui.TextColored(ImVec4(1, 0.8, 0, 1),'Ability History:')
+        ImGui.SameLine()
+        if ImGui.Button(icons.FA_EXPAND,20,20) then
+            ImGui.OpenPopup("ExpandedAbilityHistory")
+        end
+        DrawAbilityHistory()
+        
 
         if ImGui.Button("Test", BUTTON_SIZE, BUTTON_SIZE) then
             local tank = require('routines.tank')
@@ -2381,6 +2463,7 @@ local function DrawGenTab()
         state.config.useMQ2Melee = DrawCheckbox(state.config.useMQ2Melee, "Use MQ2Melee")
         state.config.memSpellSetAtStart = DrawCheckbox(state.config.memSpellSetAtStart, "Mem Spell Set At Start")
         state.config.spellSetName = DrawTextInput(state.config.spellSetName, "Spell Set Name", 100)
+        state.config.maxTrackedAbils = DrawNumberInput(state.config.maxTrackedAbils,"Ability History Max # Tracked",{0,math.huge})
         ImGui.NewLine()
         ImGui.Text('Assist Type:')
         local asstypes = { "Group MA", "Raid MA", "Custom Name", "Custom ID"}

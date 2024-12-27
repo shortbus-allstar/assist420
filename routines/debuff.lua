@@ -155,6 +155,8 @@ end
 
 function mod.doDebuffs()
     write.Trace('Debuff routine started')
+    if state.backoff then return end
+    if state.paused then return end
     if (mq.gettime() - state.debufftimer) < 1000 then return end
 
     -- Get valid debuff targets

@@ -41,6 +41,17 @@ function mod.combatStatus()
     return 'out' 
 end
 
+function mod.formatTimestamp(eventTimestamp)
+    -- Calculate the elapsed milliseconds since the event occurred
+    local elapsedMilliseconds = eventTimestamp - state.scriptStartMilliseconds
+    -- Add the elapsed seconds to the script start time
+    local absoluteTime = state.scriptStartTime + math.floor(elapsedMilliseconds / 1000)
+    -- Format the absolute time into a readable string
+    return os.date("%Y-%m-%d %H:%M:%S", absoluteTime)
+end
+
+
+
 function mod.XTAggroCount()
     write.Trace('XTAggroCount function')
     local count = 0

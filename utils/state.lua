@@ -37,7 +37,9 @@ end
 
 
 local state = {
+    abilityhistory = {},
     assistSpawn = nil,
+    backoff = false,
     buffqueue = {},
     campxloc = nil,
     campyloc = nil,
@@ -69,8 +71,11 @@ local state = {
     pulling = false,
     pullIgnores = {},
     queueCombat = {},
+    queuedabils = {},
     queueOOC = {},
-    version = 'v1.0.1-beta',
+    scriptStartTime = os.time(), -- System time when the script started
+    scriptStartMilliseconds = mq.gettime(), -- Millisecond time when the script started
+    version = 'v1.0.3-beta',
 }
 
 local function doConditions()
@@ -175,7 +180,27 @@ local function processBuffRoutine()
     end
 end
 
+local function processQueuedAbils()
+    if #state.queuedabils == 0 then return end
+    local abils = require('routines.abils')
+    for i = 1, #state.queuedabils do
+        if abils.processQueueAbil(state.queuedabils[i]) then
+            state.nextAbil[1], state.nextAbil[2] = state.queuedabils[i], "queue"
+            break -- Stop after finding the first valid ability
+        else
+            state.nextAbil[1], state.nextAbil[2] = nil, nil
+        end
+    end
+    if state.nextAbil[1] and state.nextAbil[2] then
+        return true
+    else
+        return false
+    end
+end
+
 local function whatNext()
+    local suc = processQueuedAbils()
+    if suc then return end
     local routineList = getRoutineOrder()
     
     for _, routine in pairs(routineList) do
@@ -199,31 +224,40 @@ local function whatNext()
 end
 
 local function checkAsynchronousRemovals()
+    write.Trace("Checking asynchronous removals")
+
+    -- Get the most recent ability
+    local lastUsed = state.abilityhistory[1]
+    if not lastUsed then return end
+
     -- Check Buff Queue
-    for i = #state.buffqueue, 1, -1 do
-        local entry = state.buffqueue[i]
-        local abil = entry.ability
-        -- Conditions:
-        -- 1. mq.TLO.Target.ID() == entry.requesterID
-        -- 2. mq.TLO.Me.Casting.Name() == abil.name
-        if mq.TLO.Target.ID() == entry.requesterID and mq.TLO.Me.Casting.Name() == abil.name then
-            -- Remove this ability from the buff queue
-            table.remove(state.buffqueue, i)
-            write.Debug(("Removed buff ability %s from queue based on async conditions."):format(abil.name))
+    if #state.buffqueue > 0 then
+        local buffEntry = state.buffqueue[1]
+        if lastUsed.name == buffEntry.ability.name and lastUsed.target == buffEntry.requesterID and (mq.gettime() - lastUsed.timestamp) < 2000 then
+            table.remove(state.buffqueue, 1)
+            write.Info("Processed buff: %s on target ID %d", lastUsed.name, lastUsed.target)
         end
     end
 
     -- Check Cure Queue
-    for i = #state.curequeue, 1, -1 do
-        local entry = state.curequeue[i]
-        local abil = entry.ability
-        if mq.TLO.Target.ID() == entry.requesterID and mq.TLO.Me.Casting.Name() == abil.name then
-            -- Remove this cure ability from the cure queue
-            table.remove(state.curequeue, i)
-            write.Debug(("Removed cure ability %s from queue based on async conditions."):format(abil.name))
+    if #state.curequeue > 0 then
+        local cureEntry = state.curequeue[1]
+        if lastUsed.name == cureEntry.ability.name and lastUsed.target == cureEntry.requesterID and (mq.gettime() - lastUsed.timestamp) < 2000 then
+            table.remove(state.curequeue, 1)
+            write.Info("Processed cure: %s on target ID %d", lastUsed.name, lastUsed.target)
+        end
+    end
+
+    -- Check General Abilities Queue
+    if #state.queuedabils > 0 then
+        local abilEntry = state.queuedabils[1]
+        if lastUsed.name == abilEntry.name and lastUsed.target == abilEntry.tarid and (mq.gettime() - lastUsed.timestamp) < 2000 then
+            table.remove(state.queuedabils, 1)
+            write.Info("Processed ability: %s on target ID %d", lastUsed.name, lastUsed.target)
         end
     end
 end
+
 
 
 function state.updateLoopState()

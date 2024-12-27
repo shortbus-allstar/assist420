@@ -440,11 +440,14 @@ function mod.doHeals()
     if not healTargets or #healTargets == 0 then
         write.Debug("No heal targets found.")
         if #state.curequeue > 0 then
+            local abils = require('routines.abils')
             local request = state.curequeue[1]
             local id = request.requesterID
             local abil = request.ability
     
             abil["tarid"] = id
+
+            if not abils.isAbilReady(abil.name,abil.type,0,false) then return nil, nil end
     
             return abil, queue
         end

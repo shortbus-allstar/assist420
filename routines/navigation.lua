@@ -165,6 +165,10 @@ function mod.iAmPulling(tar,pullCmd)
         mq.cmd('/nav stop')
         write.Info('Arrived at pull target')
         return 'finished'
+    elseif state.backoff then
+        mq.cmd('/nav stop')
+        write.Info('backing off')
+        return 'aggro'
     end
 
     if not mq.TLO.Navigation.Active() and (tar.Distance3D() >= (state.config.pullAbilRange + 10) or tar.Distance3D == nil or not tar.LineOfSight()) then

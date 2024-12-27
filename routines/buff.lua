@@ -48,7 +48,7 @@ function mod.activateBuff(abiltable,delay)
         mq.delay(300)
     end
     local abils = require('routines.abils')
-    local success, abildelay = abils.doAbility(abiltable.name,abiltable.type,abiltable.target,delay)
+    local success, abildelay = abils.doAbility(abiltable.name,abiltable.type,abiltable.tarid,delay)
     if success then
         if abiltable.loopdel == 0 then return abildelay 
         else
@@ -304,7 +304,10 @@ function mod.doBuffs()
 
     local result = mod.processBuffRequestsFromQueue()
     if result then
-        return result, "buffs"
+        local abils = require('routines.abils')
+        if abils.isAbilReady(result.name,result.type,0,false) then
+            return result, "buffs"
+        else return nil, nil end
     end
 
 

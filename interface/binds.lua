@@ -166,6 +166,24 @@ function mod.bindcallback(arg1,arg2)
     end
 end
 
+function mod.backoff(arg1)
+    if not arg1 then
+        if state.backoff == true then
+            write.Help('Backing On')
+            state.backoff = false
+        elseif state.backoff == false then 
+            write.Help('Backing Off')
+            state.backoff = true
+        end
+    elseif arg1 == 'On' or arg1 == 'on' then
+        write.Help('Backing Off')
+        state.backoff = true
+    elseif arg1 == 'Off' or arg1 == 'off' then
+        write.Help('Backing On')
+        state.backoff = false
+    end
+end
+
 function mod.var(key, newValue)
     local parts = {}
     for part in key:gmatch("[^.]+") do

@@ -141,7 +141,9 @@ function mod.isAbilReady(name,type,abilcd,feign)
         local rankname = mq.TLO.Spell(name).RankName() or name
         if rankname then 
             if mq.TLO.Spell(rankname).Mana() >= mq.TLO.Me.CurrentMana() then write.Info('Not enough mana') return false end
-            if not mq.TLO.Me.Gem(rankname)() then
+            if not mq.TLO.Me.Gem(rankname)() and state.canmem == false then
+                return false
+            elseif not mq.TLO.Me.Gem(rankname)() then
                 return true
             end
             return mq.TLO.Me.GemTimer(rankname)() == 0
@@ -192,6 +194,7 @@ function mod.doAbility(name,type,tartype,memdelay,data)
             end
         end
         if not mq.TLO.Me.Gem(rankname)() then
+            if not mq.TLO.Cast.Ready() then mq.delay(500) end
             if not state.canmem or data == "Heal" then return false end
             delay = mq.TLO.Spell(rankname).RecastTime() + 500
             write.Info('Memming ' .. type .. ' ' .. name)
@@ -220,6 +223,12 @@ function mod.doAbility(name,type,tartype,memdelay,data)
                 end
                 write.Info('Using ' .. type .. ' ' .. name)
                 mq.cmd(cmd)
+                table.insert(state.abilityhistory, 1, {name = name, target = tarid, timestamp = mq.gettime()})
+                -- Remove oldest entry if history exceeds maxTrackedAbilities
+                if #state.abilityhistory > state.config.maxTrackedAbils then
+                    table.remove(state.abilityhistory)
+                end
+                write.Debug("Tracked ability: %s on target ID %s", name, tarid)
                 mq.delay(1000)
                 state.canmem = true
             end
@@ -279,7 +288,15 @@ function mod.doAbility(name,type,tartype,memdelay,data)
     if data == "AE HoT" then
         state.hotTimers[0] = mq.gettime()
     end
+    local tarid = mq.TLO.Target.ID()
     mq.cmd(cmd)
+
+    table.insert(state.abilityhistory, 1, {name = name, target = tarid, timestamp = mq.gettime()})
+    -- Remove oldest entry if history exceeds maxTrackedAbilities
+    if #state.abilityhistory > state.config.maxTrackedAbils then
+        table.remove(state.abilityhistory)
+    end
+    write.Debug("Tracked ability: %s on target ID %s", name, tarid)
 
     local starttime = mq.gettime()
     state.cooldowns[name] = mq.gettime()
@@ -352,16 +369,18 @@ function mod.targetHandling(tartype,custtar)
     if tartype == 'MA' then id = mq.TLO.Spawn(state.maname).ID() end
     if tartype == 'MA Target' then id = state.assistSpawn.ID() end
     if tartype == 'Custom Lua ID' then
-        local result, err = load('return ' .. custtar, nil, 't', { mq = mq })
-        if result then
-            local success, value = pcall(result)
-            if success then
-                id = value
+        if tartype == 'Custom Lua ID' then
+            local result, err = load('return ' .. custtar, nil, 't', { mq = mq })
+            if result then
+                local success, value = pcall(result)
+                if success then
+                    id = value
+                else
+                    write.Error('Error during custtar pcall: ' .. value)
+                end
             else
-                write.Error('Error during custtar pcall: ' .. value)
+                write.Error('Error during custtar load: ' .. err)
             end
-        else
-            write.Error('Error during custtar load: ' .. err)
         end
     end
     return id
@@ -379,8 +398,60 @@ function mod.processAbility(abiltable)
     if abiltable.burn == true and state.config.burn ~= 'auto' then return false end
     if not mod.isAbilReady(abiltable.name,abiltable.type,abiltable.abilcd,abiltable.feign) then return false end
     if not mod.loadAbilCond(abiltable.cond) then return false end
+    local tarid = mod.targetHandling(abiltable.target,abiltable.custtar)
+    local tarDistance = mq.TLO.Spawn(tarid).Distance3D() or 0 
+    local spellInfo = mq.TLO.Spell(abiltable.name)
+    local rankname = (spellInfo and spellInfo.RankName()) or abiltable.name
+    local spell = nil
+    if abiltable.type == "AA" then
+        spell = mq.TLO.Me.AltAbility(rankname).Spell
+    elseif abiltable.type == "Spell" or abiltable.type == "Disc" then 
+        spell = mq.TLO.Spell(rankname)
+    elseif abiltable.type == "Item" then 
+        spell = mq.TLO.FindItem(rankname).Spell
+    end
+
+    local spellRange = 0
+
+    if spell and spell.MyRange() then 
+        spellRange = spell.AERange()
+        if spellRange == 0 then spellRange = spell.MyRange() end
+        
+        write.Debug(tarDistance)
+        write.Debug(spell.MyRange() or "nil")
+        if tarDistance >= spellRange and spell.TargetType() ~= "Self" then write.Info('Target out of Range') return nil end
+    end
     if state.config.feignOverride and abiltable.feign then return false end
     return abiltable, 'conditions'
+end
+
+function mod.processQueueAbil(abiltable)
+    local tarDistance = mq.TLO.Spawn(abiltable.tarid).Distance3D() or 0 
+    local spell = nil
+    local spellInfo = mq.TLO.Spell(abiltable.name)
+    local rankname = (spellInfo and spellInfo.RankName()) or abiltable.name
+    if state.paused then return nil end
+    if not mod.isAbilReady(abiltable.name,abiltable.type,0,false) then return nil end
+    if abiltable.type == "AA" then
+        spell = mq.TLO.Me.AltAbility(rankname).Spell
+    elseif abiltable.type == "Spell" or abiltable.type == "Disc" then 
+        spell = mq.TLO.Spell(rankname)
+    elseif abiltable.type == "Item" then 
+        spell = mq.TLO.FindItem(rankname).Spell
+    end
+
+    local spellRange = 0
+
+    if spell and spell.MyRange() then 
+        spellRange = spell.AERange()
+        if spellRange == 0 then spellRange = spell.MyRange() end
+        
+        write.Debug(tarDistance)
+        write.Debug(spell.MyRange() or "nil")
+        if tarDistance >= spellRange and spell.TargetType() ~= "Self" then write.Info('Target out of Range') return nil end
+    end
+
+    return abiltable, 'queue'
 end
 
 function mod.activateCharm(abiltable)
@@ -422,6 +493,19 @@ function mod.activateAbility(abiltable,delay)
     return abildelay
 end
 
+function mod.activateQueuedAbility(abiltable,delay)
+    if mq.TLO.Target.ID() ~= abiltable.tarid then
+        if delay then
+            if delay < 300 then return end
+        end
+        mq.cmdf('/squelch /mqt id %s',abiltable.tarid)
+        write.Info('Targeting: %s',mq.TLO.Spawn(abiltable.tarid).CleanName())
+        mq.delay(300)
+    end
+    local _, abildelay = mod.doAbility(abiltable.name,abiltable.type,abiltable.tarid,delay)
+    return abildelay
+end
+
 function mod.customCount(tbl)
     local count = 0
     for _, _ in pairs(tbl) do
@@ -432,6 +516,7 @@ end
 
 function mod.doQueue(queue,name)
     write.Trace('\apCHECKING ABILS')
+    if state.backoff then return end
     write.Trace(name)
     write.Trace(#queue)
     local abiltable = nil
@@ -472,6 +557,72 @@ function mod.removeAbilFromQueue(abiltable, queue)
         queue[index] = nil 
     else write.Error('Index not declared correctly') end
 end
+
+function mod.queueAbility(abilityName,target)
+    write.Trace("Queueing ability with name: %s",abilityName)
+
+    -- Search for the ability across all configured ability tables
+    local abiltable = nil
+    local abilityLists = {
+        state.config.abilities,
+        state.config.aggroabils,
+        state.config.healabils,
+        state.config.debuffabils,
+        state.config.buffabils,
+    }
+
+    for _, abilList in pairs(abilityLists) do
+        for _, abil in ipairs(abilList[state.class] or {}) do
+            if abil.name:lower() == abilityName:lower() then
+                abiltable = abil
+                break
+            end
+        end
+        if abiltable then break end
+    end
+
+    if not abiltable then
+        write.Warn("Ability not found: %s", abilityName)
+        return
+    end
+
+    -- Resolve the target type to a target ID
+    local targetID = nil
+    if target == "None" then
+        targetID = mq.TLO.Target.ID() -- Use the current target
+    elseif target == "Self" then
+        targetID = mq.TLO.Me.ID()
+    elseif target == "Group Tank" then
+        targetID = mq.TLO.Group.MainTank.ID()
+    elseif target == "Group MA" then
+        targetID = mq.TLO.Group.MainAssist.ID()
+    elseif target == "MA Target" then
+        targetID = mq.TLO.Me.GroupAssistTarget.ID()
+    else
+        local result, err = load('return ' .. target, nil, 't', { mq = mq })
+        if result then
+            local success, value = pcall(result)
+            if success then
+                targetID = value
+            else
+                write.Error('Error during custtar pcall: ' .. value)
+            end
+        else
+            write.Error('Error during custtar load: ' .. err)
+        end
+    end
+
+    if not targetID then
+        write.Warn("Failed to resolve target ID for target: %s", target)
+        return
+    end
+
+    -- Add the ability to the queued abilities list
+    abiltable.tarid = targetID
+    table.insert(state.queuedabils, abiltable)
+    write.Info("Queued ability: %s for target ID: %d", abilityName, targetID)
+end
+
 
 
 
