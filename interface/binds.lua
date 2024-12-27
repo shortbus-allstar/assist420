@@ -172,10 +172,12 @@ function mod.backoff(arg1)
             write.Help('Backing On')
             state.backoff = false
         elseif state.backoff == false then 
+            mq.cmd('/attack off')
             write.Help('Backing Off')
             state.backoff = true
         end
     elseif arg1 == 'On' or arg1 == 'on' then
+        mq.cmd('/attack off')
         write.Help('Backing Off')
         state.backoff = true
     elseif arg1 == 'Off' or arg1 == 'off' then
