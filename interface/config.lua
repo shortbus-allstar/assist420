@@ -254,6 +254,12 @@ mod.configSettings = {
     tankTaunting = true,
     tankEngageRadius = 15,
     useMQ2Melee = false,
+    watchdog = {
+        enabled = true,
+        restart = true,
+        restartLimit = 5,
+        pulse = 2000,
+    },
     xTarHealList = 4,
 }
 

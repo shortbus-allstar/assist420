@@ -533,6 +533,8 @@ function mod.doQueue(queue,name)
 end
 
 function mod.initQueues(cfgtbl)
+    if not state.queueOOC or type(state.queueOOC) ~= "table" then state.queueOOC = {} end
+    if not state.queueCombat or type(state.queueCombat) ~= "table" then state.queueCombat = {} end
     for _, v in ipairs(cfgtbl) do
         if v.usecombat then
             state.queueCombat[v.priority] = v

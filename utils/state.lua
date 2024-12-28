@@ -5,7 +5,7 @@ local https = require("ssl.https")
 local ltn12 = require("ltn12")
 
 -- Function to retrieve the latest GitHub version
-local function getGitHubVersion()
+function GetGitHubVersion()
     local url = "https://api.github.com/repos/shortbus-allstar/assist420/releases"
     local response = {}
 
@@ -36,6 +36,7 @@ local function getGitHubVersion()
 end
 
 
+
 local state = {
     abilityhistory = {},
     assistSpawn = nil,
@@ -57,7 +58,7 @@ local state = {
     dead = false,
     debufftimer = 0,
     facetimer = 0,
-    githubver = getGitHubVersion(),
+    githubver = GetGitHubVersion(),
     hotTimers = {},
     maname = nil,
     medding = false,
@@ -73,9 +74,12 @@ local state = {
     queueCombat = {},
     queuedabils = {},
     queueOOC = {},
-    scriptStartTime = os.time(), -- System time when the script started
-    scriptStartMilliseconds = mq.gettime(), -- Millisecond time when the script started
+    scriptStartTime = os.time(),
+    scriptStartMilliseconds = mq.gettime(),
     version = 'v1.0.3-beta',
+    watchdog = {
+        restartCount = 0,
+    },
 }
 
 local function doConditions()
