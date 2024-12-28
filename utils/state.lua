@@ -76,7 +76,7 @@ local state = {
     queueOOC = {},
     scriptStartTime = os.time(),
     scriptStartMilliseconds = mq.gettime(),
-    version = 'v1.0.3-beta',
+    version = 'v1.0.4-beta',
     watchdog = {
         restartCount = 0,
     },
