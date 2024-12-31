@@ -598,34 +598,6 @@ function ability_lists.DrawList()
     end
 
     -- The section that draws fancy icons, text, etc.
-    ImGui.SameLine()
-    if state.copyMode then
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
-    else
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
-    end
-
-    ImGui.PopStyleColor()
-    ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
-    ImGui.SetWindowFontScale(3)
-    ImGui.Text('Conditions')
-    ImGui.PopStyleColor()
-    ImGui.SetWindowFontScale(1)
-
-    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 345)
-
-    anim:SetTextureCell(51)
-    ImGui.DrawTextureAnimation(anim,45,45)
-    ImGui.SameLine()
-    anim:SetTextureCell(356)
-    ImGui.DrawTextureAnimation(anim,45,45)
-    ImGui.SameLine()
-    anim:SetTextureCell(42)
-    ImGui.DrawTextureAnimation(anim,45,45)
-    ImGui.SameLine()
-    anim:SetTextureCell(38)
-    ImGui.DrawTextureAnimation(anim,45,45)
-    ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.text)
 end
 
 return ability_lists

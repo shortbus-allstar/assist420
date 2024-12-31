@@ -286,7 +286,7 @@ local function getCorrectQueue(role)
                 if not lib.passiveZone(mq.TLO.Zone.ID()) then
                     navigation.doPulls()
                     if lib.combatStatus() ~= 'out' then
-                        combat.doTanking()
+                        tank.doTanking()
                     end
                     doNextAbility(delay)
                 end

@@ -20,7 +20,148 @@ function mod.init()
     mq.event('zoned', 'LOADING, PLEASE WAIT...', mod.zoning)
     mq.event('rezzed', 'You regain some experience from resurrection.', mod.notDead)
     mq.event('KeywordBuffRequest', '#1# tells you, \'#2#\'', mod.handleKeywordRequest)
+    for _, v in pairs(state.config.customEvents) do
+        if v.name == "" or v.trigger == '' or not v.active then goto next end
+        mq.event(v.name, v.trigger, function(_, ...)
+            local args = { ... }
+    
+            ------------------------------------------------------------------------
+            -- Determine the target ID (if needed for abilities)
+            ------------------------------------------------------------------------
+            local targetID = nil
+            if v.targetType == "Self" then
+                targetID = mq.TLO.Me.ID()
+            elseif v.targetType == "None" then 
+                targetID = mq.TLO.Target.ID()
+            elseif v.targetType == "Group Tank" then
+                targetID = mq.TLO.Group.MainTank.ID()
+            elseif v.targetType == "Group Assist" then
+                targetID = mq.TLO.Group.MainAssist.ID()
+            elseif v.targetType == "MA Target" then
+                targetID = mq.TLO.Me.GroupAssistTarget.ID()
+            elseif v.targetType:match("#%d#") then
+                -- If the user typed something like "#1#", interpret that as the first arg
+                local argIndex = tonumber(v.targetType:match("#(%d+)#"))
+                local argValue = args[argIndex]
+                if argValue then
+                    local spawn = mq.TLO.Spawn(argValue)
+                    if spawn then
+                        targetID = spawn.ID()
+                    end
+                end
+            elseif v.targetType == "Custom Lua ID" then
+                -- Evaluate whatever the user put in v.luaID as a chunk of code returning a targetID
+                local func, err = load("return " .. v.luaID, nil, "t", { mq = mq })
+                if func then
+                    local success, result = pcall(func)
+                    if success then
+                        targetID = result
+                    end
+                end
+            end
+    
+            ------------------------------------------------------------------------
+            -- 1) If abilityName != "None", queue the ability
+            ------------------------------------------------------------------------
+            if v.abilityName and v.abilityName ~= "" and v.abilityName ~= "None" then
+                if targetID then
+                    local abils = require('routines.abils')
+                    abils.queueAbility(v.abilityName, _, targetID)
+                end
+            end
+
+    
+            ------------------------------------------------------------------------
+            -- 2) If cmd is set, run mq.cmd(...) after replacing #1#, #2#, etc.
+            ------------------------------------------------------------------------
+            if v.cmd and v.cmd ~= "" then
+                local outputCmd = v.cmd
+                for i, argVal in ipairs(args) do
+                    -- Replace e.g. "#1#" with the first argVal, "#2#" with the second, etc.
+                    local pattern = "#" .. i .. "#"
+                    outputCmd = outputCmd:gsub(pattern, argVal)
+                end
+                mq.cmd(outputCmd)
+            end
+        end)
+        ::next::
+    end
+    
 end
+
+function mod.unregisterSingleEvent(key)
+    local v = state.config.customEvents[key]
+    if not v then return end
+    if v.name and v.name ~= "" then
+        mq.unevent(v.name)
+    end
+end
+
+-- Put this somewhere in your script so it’s accessible (e.g. top-level function)
+function mod.registerSingleEvent(key)
+    local v = state.config.customEvents[key]
+    if not v then return end
+
+    if not v.active then
+        return
+    end
+
+    -- Optional: remove old event if you want to avoid duplicate registrations
+    mq.unevent(v.name)
+
+    mq.event(v.name, v.trigger, function(_, ...)
+        local args = { ... }
+        local targetID = nil
+
+        -- 1) Figure out the target
+        if v.targetType == "Self" then
+            targetID = mq.TLO.Me.ID()
+        elseif v.targetType == "None" then 
+            targetID = mq.TLO.Target.ID()
+        elseif v.targetType == "Group Tank" then
+            targetID = mq.TLO.Group.MainTank.ID()
+        elseif v.targetType == "Group Assist" then
+            targetID = mq.TLO.Group.MainAssist.ID()
+        elseif v.targetType == "MA Target" then
+            targetID = mq.TLO.Me.GroupAssistTarget.ID()
+        elseif v.targetType:match("#%d#") then
+            local argIndex = tonumber(v.targetType:match("#(%d+)#"))
+            local argValue = args[argIndex]
+            if argValue then
+                local spawn = mq.TLO.Spawn(argValue)
+                if spawn then
+                    targetID = spawn.ID()
+                end
+            end
+        elseif v.targetType == "Custom Lua ID" then
+            local func, err = load("return " .. v.luaID, nil, "t", { mq=mq })
+            if func then
+                local success, result = pcall(func)
+                if success then
+                    targetID = result
+                end
+            end
+        end
+
+        -- 2) Queue ability if not "None"
+        if v.abilityName and v.abilityName ~= "" and v.abilityName ~= "None" then
+            if targetID then
+                local abils = require('routines.abils')
+                abils.queueAbility(v.abilityName, _, targetID)
+            end
+        end
+
+        -- 3) Run command if specified, replacing #1#, #2# placeholders
+        if v.cmd and v.cmd ~= "" then
+            local outputCmd = v.cmd
+            for i, argVal in ipairs(args) do
+                outputCmd = outputCmd:gsub("#"..i.."#", argVal or "")
+            end
+            mq.cmd(outputCmd)
+        end
+    end)
+end
+
 
 function mod.notDead()
     state.dead = false
@@ -64,13 +205,12 @@ mod.interruptcallback = function(line, arg1)
 end
 
 function mod.handleKeywordRequest(line, senderName, message)
-    print('asdf')
     local lowerMessage = message:lower()
     local matchedKeyword = nil
 
     -- Find the first keyword that occurs in the message
-    for keyword, _ in pairs(state.config.keywords) do
-        if lowerMessage:find(keyword, 1, true) then
+    for keyword, v in pairs(state.config.keywords) do
+        if lowerMessage:find(keyword, 1, true) and v.active then
             matchedKeyword = keyword
             break
         end

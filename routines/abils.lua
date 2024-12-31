@@ -560,7 +560,22 @@ function mod.removeAbilFromQueue(abiltable, queue)
     else write.Error('Index not declared correctly') end
 end
 
-function mod.queueAbility(abilityName,target)
+local function deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[deepcopy(orig_key)] = deepcopy(orig_value)
+        end
+        setmetatable(copy, deepcopy(getmetatable(orig)))
+    else
+        copy = orig
+    end
+    return copy
+end
+
+function mod.queueAbility(abilityName,target,optionalID)
     write.Trace("Queueing ability with name: %s",abilityName)
 
     -- Search for the ability across all configured ability tables
@@ -576,7 +591,7 @@ function mod.queueAbility(abilityName,target)
     for _, abilList in pairs(abilityLists) do
         for _, abil in ipairs(abilList[state.class] or {}) do
             if abil.name:lower() == abilityName:lower() then
-                abiltable = abil
+                abiltable = deepcopy(abil)
                 break
             end
         end
@@ -600,7 +615,7 @@ function mod.queueAbility(abilityName,target)
         targetID = mq.TLO.Group.MainAssist.ID()
     elseif target == "MA Target" then
         targetID = mq.TLO.Me.GroupAssistTarget.ID()
-    else
+    elseif target == "Custom Lua ID" then
         local result, err = load('return ' .. target, nil, 't', { mq = mq })
         if result then
             local success, value = pcall(result)
@@ -614,10 +629,13 @@ function mod.queueAbility(abilityName,target)
         end
     end
 
+    if optionalID then targetID = optionalID end
+
     if not targetID then
         write.Warn("Failed to resolve target ID for target: %s", target)
         return
     end
+
 
     -- Add the ability to the queued abilities list
     abiltable.tarid = targetID

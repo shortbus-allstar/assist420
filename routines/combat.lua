@@ -28,6 +28,7 @@ end
 
 function mod.initialCombatNav()
     if state.backoff then return false end
+    if not state.config.doAttacking then return false end
     write.Trace('initialCombatNav function')
     if state.assistSpawn.MaxRangeTo() and mq.TLO.Target.ID() ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= state.config.attackRange and (mq.TLO.Target.Distance3D() or 0) >= (state.assistSpawn.MaxRangeTo() - 3) and not mq.TLO.Navigation.Active() then
         mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on ; /if (${Target.Distance3D}>50) /nav target dist=%s',(state.assistSpawn.MaxRangeTo() - 3),(state.assistSpawn.MaxRangeTo() - 3))
@@ -39,6 +40,7 @@ end
 
 function mod.keepAttached()
     if state.backoff then return end
+    if not state.config.doAttacking then return end
     write.Trace('keepAttached function')
     if state.assistSpawn.MaxRangeTo() and mq.TLO.Target.ID() ~= 0 and not mq.TLO.Target.Dead() and (mq.TLO.Target.PctHPs() or 100) <= state.config.attackAt and mq.TLO.Target.Aggressive() and (mq.TLO.Target.Distance3D() or 500) <= state.config.attackRange and not mq.TLO.Navigation.Active() then
         mq.cmdf('/squelch /multiline ; /stick %s moveback uw ; /attack on',(state.assistSpawn.MaxRangeTo() - 3)) 

@@ -460,7 +460,7 @@ function config_editors.DrawDebuffEditorWindow()
                     function()
                         ImGui.Text("Debuff Name:")
                         ImGui.SameLine()
-                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                        if ImGui.Button(icons.FA_EXPAND.. "##2", ImVec2(20, 20)) then
                             ImGui.OpenPopup("FullTextPopup2")
                         end
 
@@ -587,7 +587,7 @@ function config_editors.DrawBuffEditorWindow()
                     function()
                         ImGui.Text("Buff Name:")
                         ImGui.SameLine()
-                        if ImGui.Button(icons.FA_EXPAND, ImVec2(20, 20)) then
+                        if ImGui.Button(icons.FA_EXPAND .. "##2", ImVec2(20, 20)) then
                             ImGui.OpenPopup("FullTextPopup2")
                         end
 

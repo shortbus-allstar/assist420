@@ -12,6 +12,7 @@ local abils           = require('routines.abils')
 local navigation      = require('routines.navigation')
 local widgets         = require('interface.GUI.widgets')
 local config = require('interface.config')
+local events = require('routines.events')
 
 -- icons, animations from original code
 local icons     = require('mq.icons')
@@ -864,10 +865,73 @@ function tabs.DrawConsoleTab()
 end
 
 function tabs.DrawCondsTab()
-    if ImGui.BeginTabItem(icons.MD_CALL_TO_ACTION .. "   Abilities") then
+    if ImGui.BeginTabItem(icons.MD_CALL_TO_ACTION .. "   Conditions") then
         -- The original calls “DrawList()” and “DrawEditorWindow()”
-        ability_lists.DrawList(config_editors.DrawTable)
-        config_editors.DrawEditorWindow()
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 290
+
+        local configTabOpen = false
+        local abilTabOpen = false
+        if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
+            configTabOpen = true
+        else
+            configTabOpen = false
+        end
+
+        if configTabOpen then
+            ImGui.Columns(2)
+            state.config.doConditions = DrawCheckbox(state.config.doConditions,"Do Conditions")
+            ImGui.Columns(1)
+        end
+
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Abilities") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+            ability_lists.DrawList()
+            config_editors.DrawEditorWindow()
+        end
+        ImGui.NewLine()
+
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        anim:SetTextureCell(51)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(356)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
+
+        ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
+        ImGui.SetWindowFontScale(4)
+        ImGui.Text('Conditions')
+        ImGui.PopStyleColor()
+        ImGui.SetWindowFontScale(1)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(42)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(38)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
         DrawTabEnd()
         ImGui.EndTabItem()
     end
@@ -880,6 +944,7 @@ function tabs.DrawGenTab()
     
         ImGui.Columns(2)
 
+        state.config.doAttacking = DrawCheckbox(state.config.doAttacking, "Attacking Enabled")
         state.config.doMedding = DrawCheckbox(state.config.doMedding, "Medding Enabled")
         state.config.combatMed = DrawCheckbox(state.config.combatMed, "Med in Combat")
         state.config.memSpellSetAtStart = DrawCheckbox(state.config.memSpellSetAtStart, "Mem Spell Set At Start")
@@ -1304,10 +1369,11 @@ end
 
 function tabs.DrawHealTab()
     if ImGui.BeginTabItem(icons.FA_HEART .. "   Heals") then
-        local totalWidth, _ = ImGui.GetContentRegionAvail()
-        local columnWidth = totalWidth / 2
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 200
 
-        
+
         if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
             configTabOpen = true
         else
@@ -1325,6 +1391,8 @@ function tabs.DrawHealTab()
             state.config.rezGuild = DrawCheckbox(state.config.rezGuild, "Rez Guild")
 
             DrawCureAvoidsTable()
+            ImGui.NewLine()
+            DrawOtherTankListTable()
 
             ImGui.NextColumn()
 
@@ -1342,6 +1410,11 @@ function tabs.DrawHealTab()
             state.config.hotRecastTime = DrawNumberInput(state.config.hotRecastTime, "HoT Recast Time", {0, math.huge}) -- Positive only
             state.config.rezCheckInterval = DrawNumberInput(state.config.rezCheckInterval, "Rez Check Interval", {0, math.huge}) -- Positive only
             state.config.xTarHealList = DrawNumberInput(state.config.xTarHealList, "X Target Heal List", {0, 20})
+            ImGui.NewLine()
+            ImGui.NewLine()
+            DrawHotTargetsTable()
+            
+
             ImGui.Columns(1)
         end
 
@@ -1386,16 +1459,20 @@ function tabs.DrawHealTab()
 
         ImGui.NewLine()
 
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 80)
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        -- Draw the section
         anim:SetTextureCell(99)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,45,45)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
         ImGui.SameLine()
 
         anim:SetTextureCell(118)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,45,45)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
         ImGui.SameLine()
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
@@ -1410,22 +1487,14 @@ function tabs.DrawHealTab()
 
         anim:SetTextureCell(101)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,45,45)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
         ImGui.SameLine()
 
         anim:SetTextureCell(156)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,45,45)
-
+        ImGui.DrawTextureAnimation(anim, 45, 45)
     
-        ImGui.Columns(2)
-
-        DrawOtherTankListTable()
-        ImGui.NextColumn()
-        DrawHotTargetsTable()
-
-        ImGui.Columns(1)
         DrawTabEnd()
         ImGui.EndTabItem()
     end
@@ -1433,44 +1502,97 @@ end
 
 function tabs.DrawBuffsTab()
     if ImGui.BeginTabItem(icons.FA_BOOK .. "   Buffs") then
-        local totalWidth, _ = ImGui.GetContentRegionAvail()
-        local columnWidth = totalWidth / 2
-        ImGui.Columns(2)
-        state.config.doBuffs = DrawCheckbox(state.config.doBuffs,"Do Buffs")
-        ImGui.NextColumn()
-        state.config.buffCheckInterval = DrawNumberInput(state.config.buffCheckInterval,"Buff Check Interval",{0,math.huge})
 
-        ImGui.Columns(1)
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 155
 
-        ability_lists.DrawBuffList()
-        config_editors.DrawBuffEditorWindow()
+        if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
+            configTabOpen = true
+        else
+            configTabOpen = false
+        end
 
+        if configTabOpen then
+            local totalWidth, _ = ImGui.GetContentRegionAvail()
+            local columnWidth = totalWidth / 2
+            ImGui.Columns(2)
+            state.config.doBuffs = DrawCheckbox(state.config.doBuffs,"Do Buffs")
+            ImGui.NextColumn()
+            state.config.buffCheckInterval = DrawNumberInput(state.config.buffCheckInterval,"Buff Check Interval",{0,math.huge})
+
+            ImGui.Columns(1)
+        end
+
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Abilities") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+
+            ability_lists.DrawBuffList()
+            config_editors.DrawBuffEditorWindow()
+
+            ImGui.NewLine()
+
+            if ImGui.Button("Add Buff", 100, 55) then
+                local newTemplate = abils.buffAbilTemplate
+                local newAbility = deepcopy(newTemplate)
+                newAbility.priority = #state.config.buffabils[state.class] + 1
+                table.insert(state.config.buffabils[state.class], newAbility)
+            end
+            ImGui.SameLine()
+
+            state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+
+            if state.copyMode then
+                ImGui.SameLine()
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+                ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+                local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
+                ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+            end
+        end
+    
         ImGui.NewLine()
 
-        if ImGui.Button("Add Buff", 100, 55) then
-            local newTemplate = abils.buffAbilTemplate
-            local newAbility = deepcopy(newTemplate)
-            newAbility.priority = #state.config.buffabils[state.class] + 1
-            table.insert(state.config.buffabils[state.class], newAbility)
-        end
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        -- Draw the section
+        anim:SetTextureCell(132)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
         ImGui.SameLine()
-    
-        state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
-    
-        if state.copyMode then
-            ImGui.SameLine()
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
-            local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
-            ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
-        end
-    
+
+        anim:SetTextureCell(123)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
         ImGui.SameLine()
-        if state.copyMode then
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
-        else
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
-        end
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
+
+        ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
+        ImGui.SetWindowFontScale(4)
+        ImGui.Text('Buffs')
+        ImGui.PopStyleColor()
+        ImGui.SetWindowFontScale(1)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(21)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(130)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
         ImGui.NewLine()
         DrawTabEnd()
         ImGui.EndTabItem()
@@ -1479,92 +1601,126 @@ end
 
 function tabs.DrawDebuffsTab()
     if ImGui.BeginTabItem(icons.FA_FIRE .. "   Debuffs") then
-        local totalWidth, _ = ImGui.GetContentRegionAvail()
-        local columnWidth = totalWidth / 2
-    
-        ImGui.Columns(2)
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 225
 
-        state.config.doDebuffs = DrawCheckbox(state.config.doDebuffs,"Do Debuffs")
-        state.config.doCharm = DrawCheckbox(state.config.doCharm,"Do Charm")
-        state.config.debuffMode = DrawDropdown(state.config.debuffMode,"Debuff Mode",{"Cycle Targets", "Cycle Debuffs"},150)
-        state.config.charmSpell = DrawTextInput(state.config.charmSpell,"Charm Abil",150)
-        state.config.charmType = DrawDropdown(state.config.charmType,"Charm Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
-        state.config.charmBreakSpell = DrawTextInput(state.config.charmBreakSpell,"Charm Break Abil",150)
-        ImGui.SameLine()
-        DrawInfoIconWithTooltip("This is the ability that will activate immediately on a charm break. Default target is your charm pet.")
-        state.config.charmBreakType = DrawDropdown(state.config.charmBreakType,"Charm Break Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
-
-        ImGui.NextColumn()
-
-        state.config.maxDebuffRange = DrawNumberInput(state.config.maxDebuffRange,"Max Debuff Range",{0,math.huge})
-        state.config.debuffStartAt = DrawNumberInput(state.config.debuffStartAt,"Debuff Start At",{0,100})
-        state.config.debuffStopAt = DrawNumberInput(state.config.debuffStopAt,"Debuff Stop At",{0,100})
-        state.config.debuffZRadius = DrawNumberInput(state.config.debuffZRadius,"Debuff Z Radius",{0,math.huge})
-        state.config.debuffAETargetMin = DrawNumberInput(state.config.debuffAETargetMin,"AE Target Min",{0,math.huge})
-        if ImGui.Button("Set Pet",55,20) then
-            state.currentpet = mq.TLO.Target.ID()
+        if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
+            configTabOpen = true
+        else
+            configTabOpen = false
         end
-        ImGui.SameLine()
-        ImGui.Text(string.format("Current Pet: %s",mq.TLO.Spawn(state.currentpet).CleanName()))
 
-        ImGui.Columns(1)
+        if configTabOpen then
+            ImGui.Columns(2)
 
+            state.config.doDebuffs = DrawCheckbox(state.config.doDebuffs,"Do Debuffs")
+            state.config.doCharm = DrawCheckbox(state.config.doCharm,"Do Charm")
+            state.config.debuffMode = DrawDropdown(state.config.debuffMode,"Debuff Mode",{"Cycle Targets", "Cycle Debuffs"},150)
+            state.config.charmSpell = DrawTextInput(state.config.charmSpell,"Charm Abil",150)
+            state.config.charmType = DrawDropdown(state.config.charmType,"Charm Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
+            state.config.charmBreakSpell = DrawTextInput(state.config.charmBreakSpell,"Charm Break Abil",150)
+            ImGui.SameLine()
+            DrawInfoIconWithTooltip("This is the ability that will activate immediately on a charm break. Default target is your charm pet.")
+            state.config.charmBreakType = DrawDropdown(state.config.charmBreakType,"Charm Break Abil Type",{"AA","Spell","Cmd","Disc","Item","Skill"},150)
+
+            ImGui.NextColumn()
+
+            state.config.maxDebuffRange = DrawNumberInput(state.config.maxDebuffRange,"Max Debuff Range",{0,math.huge})
+            state.config.debuffStartAt = DrawNumberInput(state.config.debuffStartAt,"Debuff Start At",{0,100})
+            state.config.debuffStopAt = DrawNumberInput(state.config.debuffStopAt,"Debuff Stop At",{0,100})
+            state.config.debuffZRadius = DrawNumberInput(state.config.debuffZRadius,"Debuff Z Radius",{0,math.huge})
+            state.config.debuffAETargetMin = DrawNumberInput(state.config.debuffAETargetMin,"AE Target Min",{0,math.huge})
+            if ImGui.Button("Set Pet",55,20) then
+                state.currentpet = mq.TLO.Target.ID()
+            end
+            ImGui.SameLine()
+            ImGui.Text(string.format("Current Pet: %s",mq.TLO.Spawn(state.currentpet).CleanName()))
+
+            ImGui.Columns(1)
+        end
+
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Abilities") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+            ability_lists.DrawDebuffList()
+            config_editors.DrawDebuffEditorWindow()
+    
+            ImGui.NewLine()
+    
+            if ImGui.Button("Add Debuff", 100, 55) then
+                local newTemplate = abils.debuffAbilTemplate
+                local newAbility = deepcopy(newTemplate)
+                newAbility.priority = #state.config.debuffabils[state.class] + 1
+                table.insert(state.config.debuffabils[state.class], newAbility)
+            end
+            ImGui.SameLine()
+        
+            state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+        
+            if state.copyMode then
+                ImGui.SameLine()
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+                ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+                local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
+                ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+            end
+        
+            ImGui.SameLine()
+            if state.copyMode then
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
+            else
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
+            end
+            ImGui.NewLine()
+        end
+
+        ImGui.NewLine()
+
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        -- Draw the section
         anim:SetTextureCell(17)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,90,90)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
         ImGui.SameLine()
 
         anim:SetTextureCell(55)
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,90,90)
-        ImGui.SameLine()
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
-        anim:SetTextureCell(5)
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
-        ImGui.DrawTextureAnimation(anim,90,90)
         ImGui.SameLine()
-
-        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 10)
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 25)
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
 
         ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
-        ImGui.SetWindowFontScale(5)
+        ImGui.SetWindowFontScale(4)
         ImGui.Text('Debuffs')
         ImGui.PopStyleColor()
         ImGui.SetWindowFontScale(1)
 
+        ImGui.SameLine()
 
+        anim:SetTextureCell(5)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
-        ability_lists.DrawDebuffList()
-        config_editors.DrawDebuffEditorWindow()
+        ImGui.SameLine()
 
+        anim:SetTextureCell(72)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
         ImGui.NewLine()
 
-        if ImGui.Button("Add Debuff", 100, 55) then
-            local newTemplate = abils.debuffAbilTemplate
-            local newAbility = deepcopy(newTemplate)
-            newAbility.priority = #state.config.debuffabils[state.class] + 1
-            table.insert(state.config.debuffabils[state.class], newAbility)
-        end
-        ImGui.SameLine()
-    
-        state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
-    
-        if state.copyMode then
-            ImGui.SameLine()
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
-            local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
-            ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
-        end
-    
-        ImGui.SameLine()
-        if state.copyMode then
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
-        else
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
-        end
-        ImGui.NewLine()
+
+
+
         DrawTabEnd()
         ImGui.EndTabItem()
     end
@@ -1757,77 +1913,102 @@ end
 
 function tabs.DrawTankTab()
     if ImGui.BeginTabItem(icons.FA_SHIELD.. "   Tanking") then
-        local totalWidth, _ = ImGui.GetContentRegionAvail()
-        local columnWidth = totalWidth / 2
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 225
 
-        ImGui.Columns(2)
+        if ImGui.CollapsingHeader(icons.FA_COG .. "   Config Options") then
+            configTabOpen = true
+        else
+            configTabOpen = false
+        end
+
+        if configTabOpen then
+
+            ImGui.Columns(2)
+            
+            state.config.doTanking = DrawCheckbox(state.config.doTanking,"Tanking Enabled")
+            state.config.tankTaunting = DrawCheckbox(state.config.tankTaunting,"Taunting Enabled")
+            state.config.petTank = DrawCheckbox(state.config.petTank,"Pet Tank Toggle")
+            state.config.tankAttackWhilePetTanking = DrawCheckbox(state.config.tankAttackWhilePetTanking,"Attack While Pet Tanking Toggle")
+
+            ImGui.NextColumn()
+
+            state.config.tankEngageRadius = DrawNumberInput(state.config.tankEngageRadius,"Tank Engage Radius")
+            state.config.tankPetAttackPct = DrawNumberInput(state.config.tankPetAttackPct,"Attack While Pet Tanking At",{0,100})
+
+            ImGui.Columns(1)
+        end
+
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Abilities") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+
+            ability_lists.DrawAggroList()
+            config_editors.DrawAggroEditorWindow()
+
+            ImGui.NewLine()
+
+            if ImGui.Button("Add Aggro Abil", 100, 55) then
+                local newTemplate = abils.aggroAbilTemplate
+                local newAbility = deepcopy(newTemplate)
+                newAbility.priority = #state.config.aggroabils[state.class] + 1
+                table.insert(state.config.aggroabils[state.class], newAbility)
+            end
+            ImGui.SameLine()
         
-        state.config.doTanking = DrawCheckbox(state.config.doTanking,"Tanking Enabled")
-        state.config.tankTaunting = DrawCheckbox(state.config.tankTaunting,"Taunting Enabled")
-        state.config.petTank = DrawCheckbox(state.config.petTank,"Pet Tank Toggle")
-        state.config.tankAttackWhilePetTanking = DrawCheckbox(state.config.tankAttackWhilePetTanking,"Attack While Pet Tanking Toggle")
+            state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
+        
+            if state.copyMode then
+                ImGui.SameLine()
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
+                ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
+                local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
+                ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
+            end
+        end
 
-        ImGui.NextColumn()
+        ImGui.NewLine()
 
-        state.config.tankEngageRadius = DrawNumberInput(state.config.tankEngageRadius,"Tank Engage Radius")
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        -- Draw the section
+        anim:SetTextureCell(1722)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(1660)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
 
         ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
-        ImGui.SetWindowFontScale(3)
+        ImGui.SetWindowFontScale(4)
         ImGui.Text('Tanking')
         ImGui.PopStyleColor()
         ImGui.SetWindowFontScale(1)
 
-        state.config.tankPetAttackPct = DrawNumberInput(state.config.tankPetAttackPct,"Attack While Pet Tanking At",{0,100})
-
-        ImGui.Columns(1)
-
-        ImGui.NewLine()
-
-        ability_lists.DrawAggroList()
-        config_editors.DrawAggroEditorWindow()
-
-        ImGui.NewLine()
-
-        if ImGui.Button("Add Aggro Abil", 100, 55) then
-            local newTemplate = abils.aggroAbilTemplate
-            local newAbility = deepcopy(newTemplate)
-            newAbility.priority = #state.config.aggroabils[state.class] + 1
-            table.insert(state.config.aggroabils[state.class], newAbility)
-        end
         ImGui.SameLine()
-    
-        state.copyMode, _ = ImGui.Checkbox("Copy Mode", state.copyMode)
-    
-        if state.copyMode then
-            ImGui.SameLine()
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() - 103)
-            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 30)
-            local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))
-            ImGui.TextColored(ImVec4(1,0,0,alpha),"Copy Mode is on!")
-        end
-    
-        ImGui.SameLine()
-        if state.copyMode then
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 119)
-        else
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 130)
-        end
 
-        ImGui.SameLine()
-        anim:SetTextureCell(1722)
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 20)
-        ImGui.DrawTextureAnimation(anim,105,105)
-
-        ImGui.SameLine()
-        anim:SetTextureCell(1660)
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 20)
-        ImGui.DrawTextureAnimation(anim,105,105)
-
-        ImGui.SameLine()
         anim:SetTextureCell(1736)
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 20)
-        ImGui.DrawTextureAnimation(anim,105,105)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
 
+        ImGui.SameLine()
+
+        anim:SetTextureCell(90)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
         ImGui.NewLine()
     
         DrawTabEnd()
@@ -1839,9 +2020,11 @@ local newKeywordBuffer = ""
 
 function tabs.DrawEventsTab()
     if ImGui.BeginTabItem(icons.FA_FILE_TEXT_O.. "   Events") then
-        local totalWidth, _ = ImGui.GetContentRegionAvail()
+        local availableWidth, _ = ImGui.GetContentRegionAvail()
+        local columnWidth = availableWidth / 2
+        local totalWidth = (45 + 5) * 4 + 180
 
-        if ImGui.CollapsingHeader("Keywords   "..icons.FA_BOOK, ImGuiTreeNodeFlags.DefaultOpen) then
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Keywords", ImGuiTreeNodeFlags.DefaultOpen) then
             -- Build combined ability list
             local allAbilities = {}
             local buffAbilities = state.config.buffabils[state.class] or {}
@@ -1887,6 +2070,10 @@ function tabs.DrawEventsTab()
 
                     -- Column 1: Keyword name
                     ImGui.TableSetColumnIndex(0)
+
+                    if state.config.keywords[keyword].active == nil then state.config.keywords[keyword].active = true end
+                    state.config.keywords[keyword].active = DrawCheckbox(state.config.keywords[keyword].active,"##active")
+                    ImGui.SameLine()
                     ImGui.Text(keyword)
 
                     -- Column 2: Multi-select combo for abilities using Selectable and icons.FA_CHECK for selected state
@@ -1981,8 +2168,210 @@ function tabs.DrawEventsTab()
                     newKeywordBuffer = ""
                 end
             end
+            ImGui.NewLine()
         end
 
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Custom Events") then
+            abilTabOpen = true
+        else
+            abilTabOpen = false
+        end
+
+        if abilTabOpen then
+
+            local eventKeys = {}
+            for key in pairs(state.config.customEvents) do
+                table.insert(eventKeys, key)
+            end
+            table.sort(eventKeys)
+            --------------------------------------------------------------------------------
+            -- Step A: Build the dropdown labels
+            --------------------------------------------------------------------------------
+            local dropdownLabels = {}
+            local keyToLabel = {}
+            for _, key in ipairs(eventKeys) do
+                local ev = state.config.customEvents[key]
+                local displayName = (ev.name and ev.name ~= "") and ev.name or key
+                table.insert(dropdownLabels, displayName)
+                keyToLabel[key] = displayName
+            end
+
+            --------------------------------------------------------------------------------
+            -- Begin Two-Column Layout
+            --------------------------------------------------------------------------------
+            ImGui.Columns(2)  -- 2 columns, no ID, no border
+
+            --------------------------------------------------------------------------------
+            -- Column 1
+            --------------------------------------------------------------------------------
+
+            ------------------------------------------------------------------------------
+            -- Step B: Determine which event is currently selected; show that in the combo
+            ------------------------------------------------------------------------------
+            local currentLabel = keyToLabel[state.selectedEventKey] or "Select Event"
+
+            currentLabel = DrawDropdown(currentLabel, "Select Event", dropdownLabels, 200)
+
+            -- Convert the chosen display label back to the real key
+            local newKey = nil
+            for k, label in pairs(keyToLabel) do
+                if label == currentLabel then
+                    newKey = k
+                    break
+                end
+            end
+
+            if newKey then
+                state.selectedEventKey = newKey
+            end
+
+            local selectedEvent = state.config.customEvents[state.selectedEventKey]
+
+            ------------------------------------------------------------------------------
+            -- If an event is selected, show Delete/Re-init in Column 1
+            ------------------------------------------------------------------------------
+            if selectedEvent then
+                if ImGui.Button("Delete Event") then
+                    mq.unevent(state.config.customEvents[state.selectedEventKey].name)
+                    state.config.customEvents[state.selectedEventKey] = nil
+                    state.selectedEventKey = nil
+                end
+
+                ImGui.SameLine()
+                if ImGui.Button("Reload Event") then
+                    -- Call our helper to re-register just this event
+                    events.registerSingleEvent(state.selectedEventKey)
+                end
+
+                if selectedEvent.active == nil then
+                    selectedEvent.active = true
+                end
+                local newActive, changedActive = ImGui.Checkbox("Active", selectedEvent.active)
+                if changedActive then
+                    selectedEvent.active = newActive
+                    if newActive then
+                        events.registerSingleEvent(state.selectedEventKey)
+                    else
+                        events.unregisterSingleEvent(state.selectedEventKey)
+                    end
+                end
+            end
+
+            ------------------------------------------------------------------------------
+            -- Step D: Create a brand-new event (also in Column 1)
+            ------------------------------------------------------------------------------
+            ImGui.Spacing()
+            ImGui.Text("Create a new Event:")
+            state.newEventName = state.newEventName or ""
+            state.newEventName = DrawTextInput(state.newEventName, "New Event Name", 200)
+
+            if ImGui.Button("Add New Event") then
+                local newKey = "customEvent_" .. (#eventKeys + 1)
+                state.config.customEvents[newKey] = {
+                    name       = state.newEventName,
+                    trigger    = "",
+                    abilityName= "None",
+                    targetType = "None",
+                    cmd        = "",
+                    luaID      = ""
+                }
+                state.selectedEventKey = newKey
+                state.newEventName = ""
+            end
+
+            --------------------------------------------------------------------------------
+            -- Move to Column 2
+            --------------------------------------------------------------------------------
+            ImGui.NextColumn()
+
+            --------------------------------------------------------------------------------
+            -- Column 2
+            -- Step C: If there's a selected event, let the user edit it
+            --------------------------------------------------------------------------------
+            if selectedEvent then
+                selectedEvent.name = DrawTextInput(selectedEvent.name or "", "Event Name", 200)
+                selectedEvent.trigger = DrawTextInput(selectedEvent.trigger, "Trigger Phrase", 200)
+
+                -- Build your ability list + "None" option
+                local abilities = {}
+                table.insert(abilities, "None") -- Place this at the top
+                local abilityTables = {
+                    state.config.abilities,
+                    state.config.aggroabils,
+                    state.config.healabils,
+                    state.config.debuffabils,
+                    state.config.buffabils,
+                }
+                for _, abilityTable in ipairs(abilityTables) do
+                    for _, classAbilities in pairs(abilityTable) do
+                        for _, ability in ipairs(classAbilities) do
+                            table.insert(abilities, ability.name)
+                        end
+                    end
+                end
+
+                selectedEvent.abilityName = DrawDropdown(
+                    (selectedEvent.abilityName ~= "" and selectedEvent.abilityName) or "None",
+                    "Ability",
+                    abilities,
+                    200
+                )
+
+                -- Let the user specify a command to run
+                selectedEvent.cmd = DrawTextInput(selectedEvent.cmd or "", "Command", 200)
+
+                local targetOptions = { "None", "Self", "Group MA", "Group Tank", "MA Target", "Custom Lua ID" }
+                selectedEvent.targetType = DrawDropdown(selectedEvent.targetType or "None", "Target Type", targetOptions, 200)
+
+                if selectedEvent.targetType == "Custom Lua ID" then
+                    selectedEvent.luaID = DrawTextInput(selectedEvent.luaID or "", "Lua Script", 200)
+                end
+            end
+
+            --------------------------------------------------------------------------------
+            -- End the columns
+            --------------------------------------------------------------------------------
+            ImGui.Columns(1)
+        end
+
+        ImGui.NewLine()
+
+        local startX = (availableWidth - totalWidth) / 2
+        if startX < 0 then startX = 0 end 
+        ImGui.SetCursorPosX(startX)
+
+        -- Draw the section
+        anim:SetTextureCell(1333)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(1353)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 11)
+
+        ImGui.PushStyleColor(ImGuiCol.Text, state.activeTheme.hovered)
+        ImGui.SetWindowFontScale(4)
+        ImGui.Text('Events')
+        ImGui.PopStyleColor()
+        ImGui.SetWindowFontScale(1)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(807)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+
+        ImGui.SameLine()
+
+        anim:SetTextureCell(788)
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 5)
+        ImGui.DrawTextureAnimation(anim, 45, 45)
+    
         DrawTabEnd()
         ImGui.EndTabItem()
     end

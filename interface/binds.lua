@@ -169,18 +169,24 @@ end
 function mod.backoff(arg1)
     if not arg1 then
         if state.backoff == true then
+            if state.config.useMQ2Melee then mq.cmd('/melee on') end
             write.Help('Backing On')
             state.backoff = false
         elseif state.backoff == false then 
             mq.cmd('/attack off')
+            if state.config.useMQ2Melee then mq.cmd('/melee off') end
+            if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
             write.Help('Backing Off')
             state.backoff = true
         end
     elseif arg1 == 'On' or arg1 == 'on' then
         mq.cmd('/attack off')
+        if state.config.useMQ2Melee then mq.cmd('/melee off') end
+        if mq.TLO.Stick.Active() then mq.cmd('/stick off') end
         write.Help('Backing Off')
         state.backoff = true
     elseif arg1 == 'Off' or arg1 == 'off' then
+        if state.config.useMQ2Melee then mq.cmd('/melee on') end
         write.Help('Backing On')
         state.backoff = false
     end

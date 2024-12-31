@@ -134,6 +134,7 @@ mod.configSettings = {
         'Shadowed Venom',
         'Curator\'s Revenge'
     },
+    customEvents = {},
     debuffAETargetMin = 2,
     debuffStartAt = 100,
     debuffStopAt = 25,
@@ -157,8 +158,10 @@ mod.configSettings = {
         WAR = {},
         WIZ = {}
     },
+    doAttacking = true,
     doBuffs = true,
     doCharm = false,
+    doConditions = true,
     doCuring = true,
     doDebuffs = true,
     doHealing = true,

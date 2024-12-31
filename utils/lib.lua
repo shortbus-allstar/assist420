@@ -31,7 +31,7 @@ function mod.combatStatus()
     if mq.TLO.Me.Combat() then write.Trace('In Combat') return 'combat' end
     if mq.TLO.Me.CombatState() == 'COMBAT' then write.Trace('Combat State') return 'combat' end
     if state.assistSpawn then
-        if (state.assistSpawn.PctHPs() or math.huge) <= state.config.attackAt then 
+        if (state.assistSpawn.PctHPs() or math.huge) <= 99 then 
             write.Trace('Group Engaged') return 'combat' 
         end
     end

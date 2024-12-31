@@ -76,7 +76,7 @@ local state = {
     queueOOC = {},
     scriptStartTime = os.time(),
     scriptStartMilliseconds = mq.gettime(),
-    version = 'v1.0.4-beta',
+    version = 'v2.0.0-beta',
     watchdog = {
         restartCount = 0,
     },
@@ -108,6 +108,7 @@ local function getRoutineOrder()
 end
 
 local function processConditionRoutine()
+    if not state.config.doConditions then return end
     local abiltable = nil
     local routine = nil
     local queue = nil
@@ -189,7 +190,8 @@ local function processQueuedAbils()
     local abils = require('routines.abils')
     for i = 1, #state.queuedabils do
         if abils.processQueueAbil(state.queuedabils[i]) then
-            state.nextAbil[1], state.nextAbil[2] = state.queuedabils[i], "queue"
+            local ability = state.queuedabils[i]
+            state.nextAbil[1], state.nextAbil[2] = ability, "queue"
             break -- Stop after finding the first valid ability
         else
             state.nextAbil[1], state.nextAbil[2] = nil, nil
@@ -225,6 +227,10 @@ local function whatNext()
             if success then return end
         end
     end
+    for i, abil in ipairs(state.queuedabils) do
+        write.Debug("Queued ability [%d]: %s (tarid: %s)", i, abil.name, abil.tarid)
+    end
+    
 end
 
 local function checkAsynchronousRemovals()
