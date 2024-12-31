@@ -4,6 +4,3 @@
 3. Reworked GUI to be more uniform
 4. Added an "Attacking Enabled" config setting
 5. Fixed some minor bugs with keywords and queued abilities
-
-**Patch Notes - v1.0.0-alpha**
-1. Initial Release
