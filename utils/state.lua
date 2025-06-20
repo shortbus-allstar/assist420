@@ -54,6 +54,7 @@ local state = {
     cooldowns = {},
     corpsetimers = {},
     curequeue = {},
+    curetimers = {},
     currentpet = nil,
     dead = false,
     debufftimer = 0,

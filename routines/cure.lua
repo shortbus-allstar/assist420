@@ -4,8 +4,13 @@ local write = require('utils.Write')
 local mod = {}
 
 function mod.dontcure(toon)
+    local toonid = mq.TLO.Spawn(toon).ID()
+    if not state.curetimers[toonid] then state.curetimers[toonid] = 0 end
+    if (mq.gettime() - (state.curetimers[toonid])) < 650 then 
+        return true
+    end
     for _, v in pairs(state.config.cureAvoids) do
-        if mq.TLO.DanNet(toon).O(v) ~= 'NULL' then 
+        if (mq.TLO.DanNet(toon).O("Me.Buff[" .. v .. "]")() ~= "NULL") then 
             return true
         end
     end
@@ -30,15 +35,16 @@ function mod.getCounts(toon)
     local pcount = tonumber(mq.TLO.DanNet(toon).O(poisonCounters)())
     local cucount = tonumber(mq.TLO.DanNet(toon).O(curseCounters)())
     local cocount = tonumber(mq.TLO.DanNet(toon).O(corCounters)())
+    write.Trace('DisCount: %s, PoiCount: %s, CoCount: %s, CuCount: %s',dcount, pcount, cocount, cucount)
     return dcount, pcount, cucount, cocount
 end
 
 function mod.rezSickCount(toon)
     local cnt = 0
-    if mq.TLO.DanNet(toon).O('Me.Buff[Resurrection Sickness]') then
+    if tonumber(mq.TLO.DanNet(toon).O('Me.Buff[Resurrection Sickness]')()) then
         cnt = cnt + 1
     end
-    if mq.TLO.DanNet(toon).O('Me.Buff[Revival Sickness]') then
+    if tonumber(mq.TLO.DanNet(toon).O('Me.Buff[Revival Sickness]')()) then
         cnt = cnt + 1
     end
     return cnt
@@ -61,12 +67,12 @@ function mod.shouldCastDetrimentals(toon)
     local rezSickCount = mod.rezSickCount(toon)
 
     -- Check if detrimentals is a number or a boolean
-    if type(detrimentals) == "number" then
-        -- Integer version: Cast detrimentals if number of detrimentals > rezSick count
+    if (tonumber(detrimentals) or 0) > 0 then
+            -- Integer version: Cast detrimentals if number of detrimentals > rezSick count
         return detrimentals > rezSickCount
-    elseif type(detrimentals) == "boolean" then
+    elseif detrimentals == "TRUE" then
         -- Boolean version: Cast detrimentals if true and rezSick count is 0
-        return detrimentals and rezSickCount == 0
+        return rezSickCount == 0
     end
 
     -- If the return type is unexpected, return false
@@ -79,12 +85,12 @@ function mod.shouldCastDetrimentalsSelf()
     local rezSickCount = mod.rezSickSelf()
 
     -- Check if detrimentals is a number or a boolean
-    if type(detrimentals) == "number" then
+    if (tonumber(detrimentals) or 0) > 0 then
         -- Integer version: Cast detrimentals if number of detrimentals > rezSick count
         return detrimentals > rezSickCount
-    elseif type(detrimentals) == "boolean" then
-        -- Boolean version: Cast detrimentals if true and rezSick count is 0
-        return detrimentals and rezSickCount == 0
+    elseif detrimentals == "TRUE" then
+    -- Boolean version: Cast detrimentals if true and rezSick count is 0
+        return rezSickCount == 0
     end
 
     -- If the return type is unexpected, return false
@@ -113,7 +119,7 @@ function mod.checkGroupAil()
                 groupcureok = false
                 insert = false
             end
-            if not mq.TLO.Group.Member(grpMem).Dead() and mq.TLO.Group.Member(grpMem).Present() and mod.shouldCastDetrimentals(grpMem) then
+            if not mq.TLO.Group.Member(grpMem).Dead() and mq.TLO.Group.Member(grpMem).Present() and mod.shouldCastDetrimentals(grpMem) and not hasbuff then
                 curetype = 'det'
                 curetarget = mq.TLO.Group.Member(grpMem).ID()
             end
@@ -150,7 +156,6 @@ function mod.checkGroupAil()
     for _, v in pairs(tocure) do
         local grpMem = mq.TLO.Group.Member(v).Name()
         local dcount, pcount, cucount, cocount = mod.getCounts(grpMem)
-        write.Trace('DisCount: %s, PoiCount: %s, CoCount: %s, CuCount: %s',dcount, pcount, cocount, cucount)
         if dcount and dcount > 0 then
             curetarget = mq.TLO.Group.Member(v).ID()
             curetype = 'disease'

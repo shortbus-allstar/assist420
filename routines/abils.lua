@@ -128,7 +128,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
     end
     if not lib.inControl() then write.Debug('Not in control') return false end
     if mq.TLO.Me.Feigning() and (feign or type == "Disc" or type == 'Spell' or type == 'AA' or type == 'Item') then write.Debug('You are feigned') return false end
-    if (mq.TLO.Me.Casting() or state.class == "BRD") and type ~= "Cmd" and type ~= "Skill" then write.Debug('Already casting') return false end
+    if (mq.TLO.Me.Casting() and state.class ~= "BRD") and type ~= "Cmd" and type ~= "Skill" then write.Debug('Already casting') return false end
     if mq.TLO.Me.Moving() and type ~= "Cmd" and type ~= "Skill" then write.Debug('Moving') return false end
 
     if type == 'Cmd' then return true end
@@ -167,7 +167,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
     end
 end
 
-function mod.doAbility(name,type,tartype,memdelay,data)
+function mod.doAbility(name,type,tartype,memdelay,data,curetarget)
     if state.paused then return false, 0 end
     if mq.TLO.Me.Casting() and state.class ~= "BRD" then return false, 0 end
     write.Trace('doAbility function')
@@ -354,6 +354,9 @@ function mod.doAbility(name,type,tartype,memdelay,data)
         mq.delay(100)
         mq.doevents('eventCannotRez')
         mq.doevents('eventCannotRez2')
+    end
+    if data == "Cure" then
+        state.curetimers[curetarget] = mq.gettime()
     end
     state.casting = false
     return true, math.huge

@@ -171,7 +171,7 @@ end
 function mod.initToon(toon)
     write.Help('Initializing DanNet Observers for ' .. toon.Name() .. '...')
     for _, v in ipairs(state.config.cureAvoids) do
-        mq.cmdf('/dobserve %s -q "%s"',toon.Name(),"Me.Buff['" .. v .. "']")
+        mq.cmdf('/dobserve %s -q "%s"',toon.Name(),'Me.Buff[' .. v .. ']')
         mq.delay(20)
     end
 

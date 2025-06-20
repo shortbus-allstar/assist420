@@ -398,11 +398,15 @@ function mod.activateHeal(abiltable,delay,cure,rez,hot)
     end
     local abils = require('routines.abils')
     local healtype = "Heal"
-    if cure then healtype = "Cure" end
+    local curetarget = nil
+    if cure then 
+        healtype = "Cure" 
+        curetarget = abiltable.tarid
+    end
     if rez then healtype = "Rez" end
     if hot then healtype = "HoT" end
     if abiltable.aeheal and hot then healtype = "AE HoT" end
-    local success, abildelay = abils.doAbility(abiltable.name,abiltable.type,abiltable.target,delay,healtype)
+    local success, abildelay = abils.doAbility(abiltable.name,abiltable.type,abiltable.target,delay,healtype,curetarget)
     if success then
         if abiltable.loopdel == 0 then return abildelay 
         else
