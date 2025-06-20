@@ -564,7 +564,7 @@ function tabs.DrawConsoleTab()
         end
 
         if state.version ~= tostring(state.githubver) then
-            local alpha = 0.5 * (1 + math.sin((style.style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))  -- Use a sine function for smooth fading
+            local alpha = 0.5 * (1 + math.sin((style.frameCounter % style.flashInterval) / style.flashInterval * (2 * math.pi)))  -- Use a sine function for smooth fading
 
             ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 75) 
             ImGui.TextColored(ImVec4(1, 0, 0, alpha), "Update Available!")
