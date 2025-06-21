@@ -69,7 +69,7 @@ function mod.shouldCastDetrimentals(toon)
     -- Check if detrimentals is a number or a boolean
     if (tonumber(detrimentals) or 0) > 0 then
             -- Integer version: Cast detrimentals if number of detrimentals > rezSick count
-        return detrimentals > rezSickCount
+        return tonumber(detrimentals) > rezSickCount
     elseif detrimentals == "TRUE" then
         -- Boolean version: Cast detrimentals if true and rezSick count is 0
         return rezSickCount == 0
@@ -87,7 +87,7 @@ function mod.shouldCastDetrimentalsSelf()
     -- Check if detrimentals is a number or a boolean
     if (tonumber(detrimentals) or 0) > 0 then
         -- Integer version: Cast detrimentals if number of detrimentals > rezSick count
-        return detrimentals > rezSickCount
+        return tonumber(detrimentals) > rezSickCount
     elseif detrimentals == "TRUE" then
     -- Boolean version: Cast detrimentals if true and rezSick count is 0
         return rezSickCount == 0

@@ -140,7 +140,7 @@ function mod.isAbilReady(name,type,abilcd,feign)
     if type == 'Spell' then 
         local rankname = mq.TLO.Spell(name).RankName() or name
         if rankname then 
-            if mq.TLO.Spell(rankname).Mana() >= mq.TLO.Me.CurrentMana() then write.Info('Not enough mana') return false end
+            if (mq.TLO.Spell(rankname).Mana() + mq.TLO.Me.ManaRegen()) >= mq.TLO.Me.CurrentMana() then write.Info('Not enough mana') return false end
             if not mq.TLO.Me.Gem(rankname)() and state.canmem == false then
                 return false
             elseif not mq.TLO.Me.Gem(rankname)() then
@@ -182,7 +182,7 @@ function mod.doAbility(name,type,tartype,memdelay,data,curetarget)
         rankname = mq.TLO.Me.AltAbility(name).Spell.RankName()
     end
 
-    if type == 'Spell' and mq.TLO.Spell(rankname).Mana() and mq.TLO.Me.CurrentMana() >= mq.TLO.Spell(rankname).Mana() then
+    if type == 'Spell' and mq.TLO.Spell(rankname).Mana() and mq.TLO.Me.CurrentMana() >= (mq.TLO.Spell(rankname).Mana() + mq.TLO.Me.ManaRegen()) then
         cmd = string.format('/casting "%s" gem%s',mq.TLO.Spell(rankname).RankName(),state.config.miscGem)
         delay = mq.TLO.Spell(rankname).MyCastTime() + 1250
         if tartype ~= 'None' and mq.TLO.Target() and mq.TLO.Spell(rankname).TargetType() ~= "Self" then

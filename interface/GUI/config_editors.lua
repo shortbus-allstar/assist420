@@ -541,8 +541,9 @@ function config_editors.DrawDebuffEditorWindow()
 
             ImGui.Columns(1) -- Reset columns to single column layout
 
-            ImGui.End()
+
         end
+        ImGui.End()
     end
 end
 
@@ -680,8 +681,9 @@ function config_editors.DrawBuffEditorWindow()
 
             ImGui.Columns(1) -- Reset columns to single column layout
 
-            ImGui.End()
+
         end
+        ImGui.End()
     end
 end
 
@@ -831,8 +833,9 @@ function config_editors.DrawHealEditorWindow()
 
             ImGui.Columns(1) -- Reset columns to single column layout
 
-            ImGui.End()
+
         end
+        ImGui.End()
     end
 end
 
