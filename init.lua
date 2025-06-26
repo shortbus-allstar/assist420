@@ -117,7 +117,7 @@ local function doSetup()
     mq.bind('/burn', function()
         for _, v in ipairs(state.config.abilities[state.class]) do
             if v.burn then
-                mq.cmdf('/queue "%s" "%s"', v.name, mq.TLO.Target.ID())
+                mq.cmdf('/queue "%s" "%s"', v.name, "None")
             end
         end
     end)
@@ -154,6 +154,8 @@ end
 local function doNextAbility(delay)
     local ability, routine = state.nextAbil[1], state.nextAbil[2]
     if not ability or not routine then return end
+    if ability.passiveZone == false and lib.passiveZone(mq.TLO.Zone.ID()) then return end
+    if ability.passiveZone == nil then ability.passiveZone = false return end
 
     if routine == 'queue' then
         -- First, process all instant-cast abilities
@@ -244,8 +246,8 @@ local function getCorrectQueue(role)
                     if lib.combatStatus() ~= 'out' then
                         combat.checkCombat()
                     end
-                    doNextAbility(delay)
                 end
+                doNextAbility(delay)
             end
         end
     elseif role == 'tank' then
@@ -258,8 +260,8 @@ local function getCorrectQueue(role)
                     if lib.combatStatus() ~= 'out' then
                         tank.doTanking()
                     end
-                    doNextAbility(delay)
                 end
+                doNextAbility(delay)
             end
         end
     elseif role == 'puller' then
@@ -273,8 +275,8 @@ local function getCorrectQueue(role)
                     if lib.combatStatus() ~= 'out' then
                         combat.checkCombat()
                     end
-                    doNextAbility(delay)
                 end
+                doNextAbility(delay)
             end
         end
     elseif role == 'pullertank' then
@@ -288,8 +290,8 @@ local function getCorrectQueue(role)
                     if lib.combatStatus() ~= 'out' then
                         tank.doTanking()
                     end
-                    doNextAbility(delay)
                 end
+                doNextAbility(delay)
             end
         end
     end

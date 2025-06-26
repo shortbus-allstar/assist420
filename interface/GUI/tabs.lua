@@ -2024,7 +2024,7 @@ function tabs.DrawEventsTab()
         local columnWidth = availableWidth / 2
         local totalWidth = (45 + 5) * 4 + 180
 
-        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Keywords", ImGuiTreeNodeFlags.DefaultOpen) then
+        if ImGui.CollapsingHeader(icons.FA_BOOK .. "   Buff Keywords", ImGuiTreeNodeFlags.DefaultOpen) then
             -- Build combined ability list
             local allAbilities = {}
             local buffAbilities = state.config.buffabils[state.class] or {}

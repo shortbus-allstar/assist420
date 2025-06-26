@@ -207,7 +207,7 @@ function config_editors.DrawEditorWindow()
         config_editors.isEditing, shouldDrawEditor = ImGui.Begin(config_editors.dynamicWindowTitle, config_editors.isEditing, flags)
         if shouldDrawEditor then
             -- Add controls for editing ability properties
-            ImGui.SetWindowSize(600,200,ImGuiCond.FirstUseEver)
+            ImGui.SetWindowSize(600,227,ImGuiCond.FirstUseEver)
             local contentWidthx, _ = ImGui.GetContentRegionAvail()
             ImGui.Columns(2, "AbilityColumns", false)
 
@@ -218,13 +218,13 @@ function config_editors.DrawEditorWindow()
 
             -- Top-left section
             if ImGui.BeginTable("TopLeftTable", 2, table_flags) then
-                ImGui.TableSetupColumn("Variable", ImGuiTableColumnFlags.WidthFixed, 70)
+                ImGui.TableSetupColumn("Variable", ImGuiTableColumnFlags.WidthFixed, 80)
                 ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch)
 
                 local alternatingColor = true
 
             -- Labels and Input fields
-                local labels = {"Name:", "Type:", "Target:", "Cond:", "Burn:", "Feign:"}
+                local labels = {"Name:", "Type:", "Target:", "Cond:", "Burn:", "Feign:", "Passive Zone:"}
                 for _, label in ipairs(labels) do
                     ImGui.TableNextColumn()
 
@@ -309,6 +309,8 @@ function config_editors.DrawEditorWindow()
                         state.config.abilities[state.class][style.editIndex].burn, _ = ImGui.Checkbox("##Burn", state.config.abilities[state.class][style.editIndex].burn)
                     elseif label == "Feign:" then
                         state.config.abilities[state.class][style.editIndex].feign, _ = ImGui.Checkbox("##Feign", state.config.abilities[state.class][style.editIndex].feign)
+                    elseif label == "Passive Zone:" then
+                        state.config.abilities[state.class][style.editIndex].passiveZone = ImGui.Checkbox("##PassiveZone", state.config.abilities[state.class][style.editIndex].passiveZone) 
                     end
                     
 
@@ -553,7 +555,7 @@ function config_editors.DrawBuffEditorWindow()
     if config_editors.isEditingBuff then
         config_editors.isEditingBuff, shouldDrawBuffEditor = ImGui.Begin(config_editors.dynamicBuffWindowTitle, config_editors.isEditingBuff, flags)
         if shouldDrawBuffEditor then
-            ImGui.SetWindowSize(600, 250, ImGuiCond.FirstUseEver) -- Adjust window size as needed
+            ImGui.SetWindowSize(600, 275, ImGuiCond.FirstUseEver) -- Adjust window size as needed
 
             -- Access the Buff ability being edited
             local abil = state.config.buffabils[state.class][style.editIndex]
@@ -562,7 +564,7 @@ function config_editors.DrawBuffEditorWindow()
             ImGui.Columns(2, "BuffColumns", false) -- Split into 2 columns
 
             -- First table
-            config_editors.DrawTable("BuffEditWin", 7, 2, {"##1", "##2"}, 100, 200, nil,
+            config_editors.DrawTable("BuffEditWin", 8, 2, {"##1", "##2"}, 100, 200, nil,
                 {
                     -- Column 1 Labels
                     function()
@@ -627,8 +629,10 @@ function config_editors.DrawBuffEditorWindow()
                         ImGui.PopStyleColor()
                     end,
                     "Active:",
+                    "Passive Zone:",
                     function() DrawInfoIconWithTooltip("Other targets outside of the default options that we will check for this buff.") end,
                     function() DrawInfoIconWithTooltip("Targets that have any of the buffs in the override list will be skipped for this buff ability.") end
+                    
                 },
                 {
                     -- Column 2 Inputs
@@ -637,6 +641,8 @@ function config_editors.DrawBuffEditorWindow()
                     function() abil.type = DrawDropdown(abil.type, "##type", dropdownOptions, 165) end,
                     function() abil.cond = DrawTextInput(abil.cond, "##Condition", 165) end,
                     function() abil.active = ImGui.Checkbox("##Active", abil.active) end,
+                    function() abil.passiveZone = ImGui.Checkbox("##PassiveZone", abil.passiveZone) end,
+                    
                     function()  
                         if ImGui.Button("Open Buff Targets",165,20) then
                             config_editors.showBuffTargetWindow = true
@@ -693,7 +699,7 @@ function config_editors.DrawHealEditorWindow()
     if config_editors.isEditingHeal then
         config_editors.isEditingHeal, shouldDrawHealEditor = ImGui.Begin(config_editors.dynamicHealWindowTitle, config_editors.isEditingHeal, flags)
         if shouldDrawHealEditor then
-            ImGui.SetWindowSize(600, 350, ImGuiCond.FirstUseEver) -- Adjust window size as needed
+            ImGui.SetWindowSize(600, 365, ImGuiCond.FirstUseEver) -- Adjust window size as needed
 
             local abil = state.config.healabils[state.class][style.editIndex]
             local dropdownOptions = {"AA", "Spell", "Item", "Skill", "Disc", "Cmd"} -- Dropdown options
@@ -704,7 +710,7 @@ function config_editors.DrawHealEditorWindow()
             ImGui.Columns(2, "HealColumns", false) -- Split into 2 columns
 
             -- First table
-            config_editors.DrawTable("HealEditWin", 10, 2, {"##1", "##2"}, 150, 110, nil,
+            config_editors.DrawTable("HealEditWin", 11, 2, {"##1", "##2"}, 150, 110, nil,
                 {
                     function()
                         ImGui.Text("Name:")
@@ -747,19 +753,14 @@ function config_editors.DrawHealEditorWindow()
                         end
                         ImGui.PopStyleColor()
                     end,
-                    function()
-                        if abil.cure then 
-                            ImGui.Text("Cure Type:")
-                        else
-                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() - 25)
-                        end
-                    end,
+                    "Cure Type:",
                     "Cure:",
                     "Rez:",
                     "Active:",
                     "AE Heal:",
                     "Emergency Heal:",
-                    "HoT:"
+                    "HoT:",
+                    "Use Passive Zone:"
                 },
                 {
                     function() abil.name = DrawTextInput(abil.name, "##Name", 200) end,
@@ -795,7 +796,8 @@ function config_editors.DrawHealEditorWindow()
                     function() abil.active = ImGui.Checkbox("##Active", abil.active) end,
                     function() abil.aeheal = ImGui.Checkbox("##aeheal", abil.aeheal) end,
                     function() abil.emergheal = ImGui.Checkbox("##emergheal", abil.emergheal) end,
-                    function() abil.hot = ImGui.Checkbox("##hot", abil.hot) end
+                    function() abil.hot = ImGui.Checkbox("##hot", abil.hot) end,
+                    function() abil.passiveZone = ImGui.Checkbox("##PassiveZone", abil.passiveZone) end
                 })
 
             ImGui.NextColumn() -- Move to the next column
@@ -830,7 +832,6 @@ function config_editors.DrawHealEditorWindow()
                     function() abil.usepets = ImGui.Checkbox("##UsePets", abil.usepets) end,
                     
                 })
-
             ImGui.Columns(1) -- Reset columns to single column layout
 
 

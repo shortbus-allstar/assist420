@@ -19,7 +19,8 @@ mod.abilTemplate = {
     usecombat = true,
     useooc = false,
     burn = false,
-    feign = false
+    feign = false,
+    passiveZone = false
 }
 
 mod.aggroAbilTemplate = {
@@ -57,6 +58,7 @@ mod.healAbilTemplate = {
     aeheal = false,
     emergheal = false,
     hot = false,
+    passiveZone = false
 }
 
 mod.buffAbilTemplate = {
@@ -73,7 +75,8 @@ mod.buffAbilTemplate = {
     useself = true,
     usepets = true,
     othertargets = {},
-    overrides = {}
+    overrides = {},
+    passiveZone = false
 }
 
 mod.debuffAbilTemplate = {
